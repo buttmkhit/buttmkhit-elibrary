@@ -34,7 +34,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError } from './lib/firebase';
+import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError, storage, ref, uploadBytesResumable, getDownloadURL } from './lib/firebase';
 
 // --- TYPES ---
 interface CustomUser {
@@ -492,11 +492,11 @@ function DocumentCard({ doc, restricted }: DocumentCardProps) {
           <span>{doc.size}</span>
         </div>
         <button 
-          disabled={restricted}
-          onClick={() => alert(`Mendownload ${doc.title}`)}
-          className={`flex items-center space-x-1 text-sm font-bold ${restricted ? 'text-slate-300 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-800'}`}
+          disabled={restricted || !doc.fileUrl}
+          onClick={() => doc.fileUrl && window.open(doc.fileUrl, '_blank')}
+          className={`flex items-center space-x-1 text-sm font-bold ${restricted || !doc.fileUrl ? 'text-slate-300 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-800'}`}
         >
-          <span>{restricted ? 'Akses Login' : 'Download'}</span>
+          <span>{restricted ? 'Akses Login' : (!doc.fileUrl ? 'File Tidak Ada' : 'Download')}</span>
           <Download size={14} />
         </button>
       </div>
@@ -506,28 +506,44 @@ function DocumentCard({ doc, restricted }: DocumentCardProps) {
 
 function AdminPanel({ documents }: { documents: any[] }) {
   const [formData, setFormData] = useState({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!selectedFile) {
+        alert("Pilih file PDF terlebih dahulu");
+        return;
+    }
     setIsUploading(true);
     try {
+      const storageRef = ref(storage, `documents/${Date.now()}_${selectedFile.name}`);
+      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+      
+      await new Promise((resolve, reject) => {
+        uploadTask.on('state_changed', null, reject, resolve);
+      });
+      
+      const downloadURL = await getDownloadURL(storageRef);
+
       const newDoc = {
         title: formData.title,
         author: formData.author,
         tag: formData.tag,
         type: formData.type,
-        size: (Math.random() * 8 + 1).toFixed(1) + ' MB',
+        size: (selectedFile.size / (1024 * 1024)).toFixed(1) + ' MB',
         date: new Date().toISOString().split('T')[0],
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         ownerId: auth.currentUser?.uid || 'custom-admin',
+        fileUrl: downloadURL
       };
       
       const colRef = collection(db, 'documents');
       await addDoc(colRef, newDoc);
       
       setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
+      setSelectedFile(null);
       alert('Dokumen berhasil ditambahkan!');
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, 'documents');
@@ -571,6 +587,16 @@ function AdminPanel({ documents }: { documents: any[] }) {
                 placeholder="Nama penulis..."
                 value={formData.author}
                 onChange={e => setFormData({...formData, author: e.target.value})}
+              />
+            </div>
+                        <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">File PDF</label>
+              <input 
+                type="file"
+                accept=".pdf"
+                required
+                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                onChange={e => e.target.files && setSelectedFile(e.target.files[0])}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">

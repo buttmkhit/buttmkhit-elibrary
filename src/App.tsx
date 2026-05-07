@@ -424,7 +424,7 @@ function AdminPanel({ documents }: { documents: any[] }) {
             console.log('Upload is ' + progress + '% done');
           }, 
           (error) => {
-            console.error("Upload task error:", error);
+            console.error("Upload task error detail:", error);
             reject(error);
           },
           () => {
@@ -459,9 +459,10 @@ function AdminPanel({ documents }: { documents: any[] }) {
       setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
       setSelectedFile(null);
       alert('Dokumen berhasil ditambahkan!');
-    } catch (error) {
+    } catch (error: any) {
       console.error("Critical error during upload/creation:", error);
-      handleFirestoreError(error, OperationType.CREATE, 'documents');
+      alert(`Gagal mengunggah: ${error.message || 'Terjadi kesalahan sistem'}`);
+      // handleFirestoreError(error, OperationType.CREATE, 'documents'); // Prevent throwing to avoid breaking state
     } finally {
       setIsUploading(false);
     }

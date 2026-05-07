@@ -1,44 +1,30 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 0. Global Safety Net
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // --- Helpers ---
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isHumasAdmin() {
-      return isSignedIn() && (
+    
+    // --- Documents Collection ---
+    match /documents/{docId} {
+      // Allow everyone to read and list documents
+      allow read: if true;
+      
+      // Allow only the administrator to create, update, or delete
+      // Whitelisting email and UID provided in the error logs
+      allow write: if request.auth != null && (
         request.auth.token.email == 'buttmkhithumas@gmail.com' ||
-        request.auth.uid == 'kNl7ebZq5lVrmdH8Ua5wJwDnFus2'
+        request.auth.uid == 'kNl7ebZq5lVrmdH8Ua5wJwDnFus2' ||
+        request.auth.token.is_admin == true
       );
     }
 
-    // --- Collections ---
-
-    match /documents/{docId} {
-      // Open read for everyone
-      allow read: if true;
-      
-      // Allow creation for logged in users (for now, will restrict to admin after verification)
-      allow create: if isSignedIn();
-      
-      // Allow edit/delete only for humas admin
-      allow update, delete: if isHumasAdmin();
-    }
-
+    // --- User Profiles ---
     match /profiles/{nip} {
       allow read: if true;
       allow write: if true;
     }
 
-    match /admins/{uid} {
-      allow read: if true;
-      allow write: if false;
+    // --- Global Deny ---
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

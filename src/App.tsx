@@ -21,20 +21,6 @@ import {
   BookOpen
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  collection, 
-  addDoc, 
-  deleteDoc, 
-  doc, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  serverTimestamp,
-  getDoc,
-  setDoc
-} from 'firebase/firestore';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError, storage, ref, uploadBytesResumable, getDownloadURL, signInAnonymously } from './lib/firebase';
 
 // --- TYPES ---
 interface CustomUser {
@@ -58,71 +44,41 @@ const ROLES = {
   ADMIN: 'admin'
 };
 
-// --- INITIAL DUMMY DATA ---
-const initialDocuments = [
-  { id: '1', title: 'Pedoman Tindakan Karantina Hewan Penyakit PMK', author: 'Pusat Karantina Hewan', tag: 'Karantina Hewan', type: 'Jurnal', size: '2.4 MB', date: '2023-10-12', url: '#' },
-  { id: '2', title: 'Identifikasi HPIK pada Komoditas Ekspor', author: 'Balai Karantina Ikan', tag: 'Karantina Ikan', type: 'Laporan Uji Terap', size: '5.1 MB', date: '2023-11-05', url: '#' },
-  { id: '3', title: 'Analisis Risiko OPTK Buah Tropis', author: 'Badan Karantina Indonesia', tag: 'Karantina Tumbuhan', type: 'Jurnal', size: '3.8 MB', date: '2024-01-20', url: '#' },
-  { id: '4', title: 'Laporan Uji Terap Perlakuan Fumigasi Fosfin', author: 'Tim Uji Terap', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '1.2 MB', date: '2024-02-15', url: '#' },
-  { id: '5', title: 'Jurnal Karantina Indonesia Vol 1', author: 'Pusat Riset Karantina', tag: 'Karantina Hewan', type: 'Jurnal', size: '8.5 MB', date: '2024-03-01', url: '#' },
-  { id: '6', title: 'Metode Deteksi Virus Udang Terbaru', author: 'Laboratorium Ikan', tag: 'Karantina Ikan', type: 'Jurnal', size: '3.2 MB', date: '2024-03-10', url: '#' },
-  { id: '7', title: 'Studi Kasus Invasif Spodoptera frugiperda', author: 'Bidang Tumbuhan', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '4.7 MB', date: '2024-04-05', url: '#' },
-];
-
 export default function App() {
   const [currentUser, setCurrentUser] = useState<CustomUser | null>(null);
   const [role, setRole] = useState(ROLES.PUBLIC);
   const [activeCategory, setActiveCategory] = useState('all');
+  const [isHome, setIsHome] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState<{show: boolean}>({ show: false });
 
-  // Firestore Listener
-  useEffect(() => {
-    const q = query(collection(db, 'documents'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docsData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setDocuments(docsData);
+  // Fetch Documents
+  const fetchDocuments = async () => {
+    try {
+      const res = await fetch('/api/documents');
+      const data = await res.json();
+      setDocuments(data);
+    } catch (err) {
+      console.error("Failed to fetch documents:", err);
+    } finally {
       setLoading(false);
-    }, (error) => {
-      console.error("Firestore onSnapshot error details:", error);
-      handleFirestoreError(error, OperationType.LIST, 'documents');
-    });
-    return () => unsubscribe();
+    }
+  };
+
+  useEffect(() => {
+    fetchDocuments();
   }, []);
 
-  // Auth Listener
+  // Session Management
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const cUser: CustomUser = {
-          uid: user.uid,
-          name: user.displayName || 'User',
-          role: user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
-          photoURL: user.photoURL || undefined
-        };
-        setCurrentUser(cUser);
-        setRole(cUser.role);
-      } else {
-        if (!localStorage.getItem('buttmkhit_session')) {
-          setCurrentUser(null);
-          setRole(ROLES.PUBLIC);
-        }
-      }
-    });
-
     const savedSession = localStorage.getItem('buttmkhit_session');
     if (savedSession) {
       const cUser = JSON.parse(savedSession);
       setCurrentUser(cUser);
       setRole(cUser.role);
     }
-
-    return () => unsubscribe();
   }, []);
 
   // Derived state
@@ -140,36 +96,44 @@ export default function App() {
     return matchesSearch && matchesCategory;
   });
 
+  const handleCategoryClick = (id: string) => {
+    setActiveCategory(id);
+    setIsHome(false);
+  };
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchQuery(e.target.value);
+    if (e.target.value.trim() !== '') {
+      setIsHome(false);
+    }
+  };
+
   const handleLogin = async () => {
     setShowAuthModal({ show: true });
   };
     
-  const handleLogout = async () => {
-    try {
-      await signOut(auth);
-      localStorage.removeItem('buttmkhit_session');
-      setCurrentUser(null);
-      setRole(ROLES.PUBLIC);
-      setActiveCategory('all');
-    } catch (error) {
-      console.error("Logout failed:", error);
-    }
+  const handleLogout = () => {
+    localStorage.removeItem('buttmkhit_session');
+    setCurrentUser(null);
+    setRole(ROLES.PUBLIC);
+    setActiveCategory('all');
+    setIsHome(true);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
       <nav className="bg-[#123138] text-white p-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 cursor-pointer" onClick={() => { setIsHome(true); setActiveCategory('all'); setSearchQuery(''); }}>
              <img src="https://karantinaindonesia.go.id/profile/logo-barantin.png" className="h-8 w-auto" alt="Logo" />
              <span className="font-bold text-lg">BUTTMKHIT e-Library</span>
           </div>
           <div className="flex items-center space-x-2 text-sm">
-             <button onClick={() => setActiveCategory('all')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all italic">Home</button>
-             <button onClick={() => setActiveCategory('hewan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Hewan</button>
-             <button onClick={() => setActiveCategory('ikan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Ikan</button>
-             <button onClick={() => setActiveCategory('tumbuhan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Tumbuhan</button>
-             <button onClick={() => setActiveCategory('jurnal')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all font-bold text-amber-400">Jurnal</button>
+             <button onClick={() => { setIsHome(true); setActiveCategory('all'); setSearchQuery(''); }} className={`px-3 py-2 rounded-lg hover:bg-emerald-600 transition-all italic ${isHome && activeCategory === 'all' ? 'bg-emerald-600 opacity-100' : 'opacity-80'}`}>Home</button>
+             <button onClick={() => handleCategoryClick('hewan')} className={`px-3 py-2 rounded-lg hover:bg-emerald-600 transition-all ${activeCategory === 'hewan' ? 'bg-emerald-600 opacity-100' : 'opacity-80'}`}>Karantina Hewan</button>
+             <button onClick={() => handleCategoryClick('ikan')} className={`px-3 py-2 rounded-lg hover:bg-emerald-600 transition-all ${activeCategory === 'ikan' ? 'bg-emerald-600 opacity-100' : 'opacity-80'}`}>Karantina Ikan</button>
+             <button onClick={() => handleCategoryClick('tumbuhan')} className={`px-3 py-2 rounded-lg hover:bg-emerald-600 transition-all ${activeCategory === 'tumbuhan' ? 'bg-emerald-600 opacity-100' : 'opacity-80'}`}>Karantina Tumbuhan</button>
+             <button onClick={() => handleCategoryClick('jurnal')} className={`px-3 py-2 rounded-lg hover:bg-emerald-600 transition-all font-bold text-amber-400 ${activeCategory === 'jurnal' ? 'bg-emerald-600 opacity-100' : 'opacity-80'}`}>Jurnal</button>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser ? (
@@ -178,7 +142,7 @@ export default function App() {
                   <button onClick={handleLogout} className="text-red-400"><LogOut size={16}/></button>
                </div>
             ) : (
-                <button onClick={() => handleLogin(ROLES.USER)} className="bg-emerald-600 px-4 py-2 rounded-full text-sm font-bold">Login</button>
+                <button onClick={() => handleLogin()} className="bg-emerald-600 px-4 py-2 rounded-full text-sm font-bold">Login</button>
             )}
           </div>
         </div>
@@ -188,23 +152,23 @@ export default function App() {
         <div className="max-w-4xl mx-auto text-center space-y-8">
             <h1 className="text-4xl font-extrabold tracking-tight">DISCOVER A WORLD OF KNOWLEDGE</h1>
             <p className="opacity-80">Repository Hasil Uji Terap & Integrasi Jurnal Global</p>
-            <div className="bg-white rounded-full p-2 flex items-center">
+            <div className="bg-white rounded-full p-2 flex items-center shadow-2xl">
                 <input 
                   type="text" 
                   placeholder="Title, Author, Or Keyword"
                   className="flex-1 bg-transparent text-slate-900 px-6 py-3 outline-none"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleSearchChange}
                 />
-                <button className="bg-amber-500 p-4 rounded-full"><Search /></button>
+                <button onClick={() => setIsHome(false)} className="bg-amber-500 p-4 rounded-full hover:bg-amber-600 transition-colors"><Search /></button>
             </div>
         </div>
       </section>
 
        <div className="max-w-7xl mx-auto px-4 flex justify-center space-x-2 my-8">
-          <button onClick={() => setActiveCategory('all')} className={`px-6 py-2 rounded-full font-bold text-sm ${activeCategory === 'all' ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>All</button>
+          <button onClick={() => { setIsHome(true); setActiveCategory('all'); setSearchQuery(''); }} className={`px-6 py-2 rounded-full font-bold text-sm ${isHome ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>All Highlights</button>
           {CATEGORIES.map(cat => (
-            <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center ${activeCategory === cat.id ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>
+            <button key={cat.id} onClick={() => handleCategoryClick(cat.id)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center ${!isHome && activeCategory === cat.id ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>
                 <cat.icon size={16} className="mr-2" />
                 {cat.label}
             </button>
@@ -212,24 +176,31 @@ export default function App() {
        </div>
 
       <main className="max-w-7xl mx-auto px-4 py-12 grid grid-cols-12 gap-8">
-         <div className="col-span-8 space-y-12">
-            {role === ROLES.ADMIN ? (
-                 <AdminPanel documents={documents} />
-              ) : role === ROLES.PUBLIC ? (
-                 <PublicView docs={publicDocs} />
+         <div className="col-span-12 lg:col-span-8 space-y-12">
+            {isHome ? (
+              <HomeView docs={publicDocs} onLogin={handleLogin} role={role} />
+            ) : (
+              role === ROLES.ADMIN ? (
+                 <AdminPanel documents={documents} refresh={fetchDocuments} />
               ) : (
                  <LibraryView docs={filteredDocs} />
-              )}
+              )
+            )}
          </div>
-         <div className="col-span-4 bg-white p-6 rounded-2xl border border-slate-200">
-             <h3 className="font-bold mb-4">Trending This Week</h3>
+         <div className="hidden lg:block col-span-4 bg-white p-6 rounded-2xl border border-slate-200 h-fit sticky top-8">
+             <h3 className="font-bold mb-4 flex items-center">
+                <FileBadge size={18} className="mr-2 text-amber-500" />
+                Trending This Week
+             </h3>
              <div className="space-y-4">
-                {documents.slice(0, 3).map(d => (
-                    <div key={d.id} className="flex items-center space-x-4 p-2 bg-slate-50 rounded-lg">
-                        <div className="w-12 h-16 bg-slate-200 rounded"></div>
-                        <div>
-                            <p className="font-bold text-xs">{d.title}</p>
-                            <p className="text-[10px] text-slate-500">{d.author}</p>
+                {documents.slice(0, 5).map(d => (
+                    <div key={d.id} className="flex items-center space-x-4 p-2 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer" onClick={() => { setSearchQuery(d.title); setIsHome(false); }}>
+                        <div className="w-10 h-12 bg-slate-100 rounded-lg flex items-center justify-center shrink-0">
+                          <FileText size={16} className="text-slate-400" />
+                        </div>
+                        <div className="overflow-hidden">
+                            <p className="font-bold text-[11px] truncate">{d.title}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{d.author}</p>
                         </div>
                     </div>
                 ))}
@@ -245,94 +216,51 @@ export default function App() {
           setRole(user.role);
           localStorage.setItem('buttmkhit_session', JSON.stringify(user));
           setShowAuthModal({ show: false });
+          setIsHome(false); // Move to library view on login
         }}
       />
     </div>
   );
 }
 
-
-interface SidebarItemProps {
-  key?: React.Key;
-  icon: any;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  collapsed: boolean;
-  badge?: number;
-  highlight?: 'emerald' | 'amber' | 'red' | 'none';
-}
-
-function SidebarItem({ icon: Icon, label, active, onClick, collapsed, badge, highlight }: SidebarItemProps) {
-  const highlightClasses = {
-    emerald: 'text-emerald-400 hover:bg-emerald-500/10',
-    amber: 'text-amber-400 hover:bg-amber-500/10',
-    red: 'text-red-400 hover:bg-red-500/10',
-    none: 'text-slate-300 hover:bg-slate-800'
-  };
-
-  const currentHighlight = highlight ? highlightClasses[highlight] : (active ? 'bg-emerald-600 text-white' : highlightClasses.none);
-
+function HomeView({ docs, onLogin, role }: { docs: any[], onLogin: () => void, role: string }) {
   return (
-    <button 
-      onClick={onClick}
-      className={`w-full flex items-center px-4 py-3 rounded-xl transition-all group ${currentHighlight}`}
-      title={collapsed ? label : ''}
-    >
-      <Icon className={`${collapsed ? 'mx-auto' : 'mr-3'} w-5 h-5 shrink-0 transition-transform group-hover:scale-110`} />
-      {!collapsed && (
-        <div className="flex items-center justify-between w-full">
-          <span className="font-medium text-sm">{label}</span>
-          {badge !== undefined && (
-            <span className={`text-[10px] px-2 py-0.5 rounded-full ${active ? 'bg-white/20' : 'bg-slate-800'}`}>{badge}</span>
-          )}
+    <div className="space-y-12">
+      <div className="space-y-4">
+        <div className="inline-flex items-center space-x-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-100">
+          <BookOpen className="w-4 h-4" />
+          <span className="text-xs font-bold uppercase tracking-wider">Beranda e-Library</span>
         </div>
-      )}
-    </button>
-  );
-}
-
-interface PublicViewProps {
-  docs: any[];
-  onLogin: () => void;
-}
-
-function PublicView({ docs, onLogin }: PublicViewProps) {
-  return (
-    <div className="max-w-4xl mx-auto space-y-12 pb-12">
-      <div className="text-center space-y-4">
-        <div className="inline-flex items-center space-x-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-100 mb-4">
-          <AlertCircle className="w-4 h-4" />
-          <span className="text-xs font-bold uppercase tracking-wider">Akses Terbatas</span>
-        </div>
-        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Selamat Datang di BUTTMKHIT e-Library</h1>
-        <p className="text-slate-500 max-w-xl mx-auto">
-          Silakan login untuk mengakses ribuan jurnal ilmiah dan laporan uji terap hasil Balai Uji Terap Teknik dan Metode Karantina Hewan, Ikan dan Tumbuhan secara lengkap.
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight leading-tight">
+          Pusat Referensi Ilmiah <br /> Karantina Indonesia
+        </h1>
+        <p className="text-slate-500 text-lg max-w-2xl">
+          Akses eksklusif hasil Uji Terap Teknik dan Metode Karantina Hewan, Ikan, dan Tumbuhan untuk peningkatan standar pelayanan teknis.
         </p>
       </div>
 
-      <div className="space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-          <h3 className="font-bold text-slate-800 flex items-center">
-            <Database className="w-5 h-5 mr-2 text-emerald-600" />
+      <div className="space-y-6">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-4">
+          <h3 className="font-bold text-slate-800 flex items-center text-xl">
+            <Database className="w-6 h-6 mr-3 text-emerald-600" />
             Cuplikan Referensi Acak
           </h3>
-          <span className="text-xs text-slate-400">Menampilkan 3 dari {initialDocuments.length}+ dokumen</span>
+          {role === 'public' && (
+            <button onClick={onLogin} className="text-emerald-600 text-sm font-bold hover:underline">
+              Login Selengkapnya &rarr;
+            </button>
+          )}
         </div>
         
-        <div className="grid gap-4">
-          {docs.map(doc => <DocumentCard key={doc.id} doc={doc} restricted />)}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {docs.map(doc => <DocumentCard key={doc.id} doc={doc} restricted={role === 'public'} />)}
         </div>
       </div>
     </div>
   );
 }
 
-interface LibraryViewProps {
-  docs: any[];
-}
-
-function LibraryView({ docs }: LibraryViewProps) {
+function LibraryView({ docs }: { docs: any[] }) {
   if (docs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20 text-slate-400">
@@ -344,19 +272,13 @@ function LibraryView({ docs }: LibraryViewProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {docs.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
     </div>
   );
 }
 
-interface DocumentCardProps {
-  key?: React.Key;
-  doc: any;
-  restricted?: boolean;
-}
-
-function DocumentCard({ doc, restricted }: DocumentCardProps) {
+function DocumentCard({ doc, restricted }: { doc: any, restricted?: boolean, key?: any }) {
   return (
     <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-xl hover:border-emerald-200 transition-all group flex flex-col h-full relative overflow-hidden">
       {restricted && (
@@ -397,7 +319,7 @@ function DocumentCard({ doc, restricted }: DocumentCardProps) {
   );
 }
 
-function AdminPanel({ documents }: { documents: any[] }) {
+function AdminPanel({ documents, refresh }: { documents: any[], refresh: () => void }) {
   const [formData, setFormData] = useState({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -409,84 +331,59 @@ function AdminPanel({ documents }: { documents: any[] }) {
         return;
     }
     setIsUploading(true);
-    console.log("Starting upload process for file:", selectedFile.name);
-    console.log("Current Auth User:", auth.currentUser?.email || 'Anonymous');
     
-    if (!auth.currentUser) {
-       console.warn("User not authenticated with Firebase. Upload might fail due to Storage/Firestore rules.");
-    }
-
     try {
-      const storagePath = `documents/${Date.now()}_${selectedFile.name}`;
-      console.log("Storage path:", storagePath);
-      const storageRef = ref(storage, storagePath);
-      const uploadTask = uploadBytesResumable(storageRef, selectedFile);
+      const data = new FormData();
+      data.append('file', selectedFile);
       
-      console.log("Upload task started...");
-      await new Promise((resolve, reject) => {
-        uploadTask.on('state_changed', 
-          (snapshot) => {
-            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-            console.log('Upload is ' + progress + '% done');
-          }, 
-          (error) => {
-            console.error("Upload task error detail:", error);
-            reject(error);
-          },
-          () => {
-            console.log("Upload task completed successfully");
-            resolve(null);
-          }
-        );
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: data
       });
       
-      console.log("Getting download URL...");
-      const downloadURL = await getDownloadURL(storageRef);
-      console.log("Download URL obtained:", downloadURL);
+      if (!uploadRes.ok) throw new Error('Upload failed');
+      const { url, size } = await uploadRes.json();
 
       const newDoc = {
-        title: formData.title,
-        author: formData.author,
-        tag: formData.tag,
-        type: formData.type,
-        size: (selectedFile.size / (1024 * 1024)).toFixed(1) + ' MB',
+        ...formData,
+        size,
         date: new Date().toISOString().split('T')[0],
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        ownerId: auth.currentUser?.uid || 'custom-admin',
-        url: downloadURL
+        url
       };
       
-      console.log("Adding document to Firestore:", newDoc);
-      const colRef = collection(db, 'documents');
-      const docRef = await addDoc(colRef, newDoc);
-      console.log("Document added with ID:", docRef.id);
+      const saveRes = await fetch('/api/documents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newDoc)
+      });
       
-      setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
-      setSelectedFile(null);
-      alert('Dokumen berhasil ditambahkan!');
+      if (saveRes.ok) {
+        setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
+        setSelectedFile(null);
+        alert('Dokumen berhasil ditambahkan!');
+        refresh();
+      }
     } catch (error: any) {
-      console.error("Critical error during upload/creation:", error);
-      alert(`Gagal mengunggah: ${error.message || 'Terjadi kesalahan sistem'}`);
-      // handleFirestoreError(error, OperationType.CREATE, 'documents'); // Prevent throwing to avoid breaking state
+      console.error(error);
+      alert(`Gagal mengunggah: ${error.message}`);
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
+  const handleDelete = async (id: number, title: string) => {
     if (!window.confirm(`Hapus dokumen "${title}"?`)) return;
     
     try {
-      const docRef = doc(db, 'documents', id);
-      await deleteDoc(docRef);
+      const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' });
+      if (res.ok) refresh();
     } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `documents/${id}`);
+      console.error(error);
     }
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+    <div className="grid grid-cols-1 gap-8 pb-12">
       <div className="space-y-6">
         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <h3 className="text-xl font-bold border-b pb-4">Tambah Data Baru</h3>
@@ -511,7 +408,7 @@ function AdminPanel({ documents }: { documents: any[] }) {
                 onChange={e => setFormData({...formData, author: e.target.value})}
               />
             </div>
-                        <div className="space-y-1">
+            <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase px-1">File PDF</label>
               <input 
                 type="file"
@@ -633,112 +530,73 @@ function AdminPanel({ documents }: { documents: any[] }) {
   );
 }
 
-// --- NEW AUTH MODAL ---
-interface AuthModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: (user: CustomUser) => void;
-}
-
-function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
-  const [isRegistering, setIsRegistering] = useState(false);
-  const [form, setForm] = useState({ nip: '', name: '', password: '' });
+function AuthModal({ isOpen, onClose, onSuccess }: { isOpen: boolean, onClose: () => void, onSuccess: (user: CustomUser) => void }) {
+  const [isRegister, setIsRegister] = useState(false);
+  const [form, setForm] = useState({ nip: '', name: '', password: '', confirmPassword: '', captchaInput: '' });
+  const [captcha, setCaptcha] = useState({ question: '', answer: 0 });
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const handleGoogleLogin = async () => {
-    setLoading(true);
-    try {
-      const res = await signInWithPopup(auth, googleProvider);
-      if (res.user) {
-        onSuccess({
-          uid: res.user.uid,
-          name: res.user.displayName || 'Google User',
-          role: res.user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
-          photoURL: res.user.photoURL || undefined
-        });
-      }
-    } catch (e: any) {
-      console.error("Google Login Error:", e);
-      if (e.code === 'auth/unauthorized-domain' || e.message?.includes('unauthorized-domain')) {
-        setError(
-          `Login Gagal: Domain ini belum diizinkan. \n\n` +
-          `Silakan buka Firebase Console -> Authentication -> Settings -> Authorized Domains, lalu tambahkan domain: \n` +
-          `- ais-dev-lucgjtl7avremuw2tg463n-554198823809.asia-southeast1.run.app \n` +
-          `- ais-pre-lucgjtl7avremuw2tg463n-554198823809.asia-southeast1.run.app`
-        );
-      } else {
-        setError(`Login Google gagal: ${e.message || e.code || 'Terjadi kesalahan'}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+  // Generate simple math captcha
+  const generateCaptcha = () => {
+    const a = Math.floor(Math.random() * 10) + 1;
+    const b = Math.floor(Math.random() * 10) + 1;
+    setCaptcha({ question: `${a} + ${b} = ?`, answer: a + b });
   };
 
-  const handleCustomLogin = async (e: React.FormEvent) => {
+  useEffect(() => {
+    if (isRegister) {
+      generateCaptcha();
+    }
+  }, [isRegister]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    setLoading(true);
-    try {
-      // 1. Check for Admin
-      if ((form.nip === 'admin' && form.password === 'admin') || (form.nip === 'humas buttmkhit' && form.password === 'humas_buttmkhit')) {
-          try {
-            const res = await signInAnonymously(auth);
-            onSuccess({
-              uid: res.user.uid,
-              name: form.nip === 'admin' ? `Administrator` : `Humas BUTTMKHIT`,
-              role: ROLES.ADMIN,
-              isCustomAdmin: true
-            });
-          } catch (anonErr: any) {
-            console.error("Anonymous Auth Error:", anonErr);
-            setError(
-              `Login Gagal: Layanan login belum siap. \n\n` +
-              `Silakan buka Firebase Console -> Authentication -> Sign-in method, lalu AKTIFKAN "Anonymous" (Anonim).`
-            );
-          }
-          return;
+    setSuccessMsg('');
+
+    // Client-side validations for registration
+    if (isRegister) {
+      if (form.password !== form.confirmPassword) {
+        setError('Password tidak cocok dengan konfirmasi.');
+        return;
       }
+      if (parseInt(form.captchaInput) !== captcha.answer) {
+        setError('Jawaban Captcha salah.');
+        generateCaptcha(); // Refresh captcha on wrong answer
+        return;
+      }
+    }
+
+    setLoading(true);
+    
+    const endpoint = isRegister ? '/api/register' : '/api/login';
+    
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form)
+      });
+      const data = await res.json();
       
-      // 2. Check for User (NIP)
-      if (isRegistering) {
-        const userRef = doc(db, 'profiles', form.nip);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) {
-          setError('NIP sudah terdaftar.');
+      if (res.ok) {
+        if (isRegister) {
+          setSuccessMsg(data.message);
+          setIsRegister(false);
+          setForm({ nip: '', name: '', password: '', confirmPassword: '', captchaInput: '' });
         } else {
-          await setDoc(userRef, {
-            nip: form.nip,
-            name: form.name,
-            password: form.password,
-            role: ROLES.USER,
-            authMethod: 'custom',
-            createdAt: serverTimestamp()
-          });
-          onSuccess({
-            uid: `nip-${form.nip}`,
-            name: form.name,
-            nip: form.nip,
-            role: ROLES.USER
-          });
+          onSuccess(data.user);
         }
       } else {
-        const userRef = doc(db, 'profiles', form.nip);
-        const snap = await getDoc(userRef);
-        if (snap.exists() && snap.data().password === form.password) {
-          onSuccess({
-            uid: `nip-${form.nip}`,
-            name: snap.data().name,
-            nip: form.nip,
-            role: ROLES.USER
-          });
-        } else {
-          setError('NIP atau Password salah.');
-        }
+        setError(data.message || 'Operasi gagal.');
+        if (isRegister) generateCaptcha();
       }
     } catch (e: any) {
       console.error(e);
       setError('Terjadi kesalahan sistem.');
+      if (isRegister) generateCaptcha();
     } finally {
       setLoading(false);
     }
@@ -754,35 +612,40 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl"
       >
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-bold text-xl text-slate-800">
-            {isRegistering ? 'Daftar Akun' : 'Login'}
-          </h3>
+          <h3 className="font-bold text-xl text-slate-800">{isRegister ? 'Daftar Akun Baru' : 'Masuk ke e-Library'}</h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X size={20} />
           </button>
         </div>
 
         <div className="p-8 space-y-6">
-          {!isRegistering && (
-            <button 
-              onClick={handleGoogleLogin}
-              disabled={loading}
-              className="w-full flex items-center justify-center space-x-3 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all font-medium text-slate-700"
-            >
-              <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-              <span>Lanjut dengan Google</span>
-            </button>
-          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {error && (
+              <div className="p-3 bg-red-50 text-red-600 text-xs font-bold rounded-xl border border-red-100 flex items-center">
+                <AlertCircle size={14} className="mr-2" />
+                {error}
+              </div>
+            )}
+            {successMsg && (
+              <div className="p-3 bg-emerald-50 text-emerald-600 text-xs font-bold rounded-xl border border-emerald-100 flex items-center">
+                <ShieldCheck size={14} className="mr-2" />
+                {successMsg}
+              </div>
+            )}
 
-          {!isRegistering && (
-            <div className="flex items-center space-x-4">
-              <div className="h-[1px] flex-1 bg-slate-100"></div>
-              <span className="text-xs text-slate-400 font-bold uppercase">Atau NIP</span>
-              <div className="h-[1px] flex-1 bg-slate-100"></div>
-            </div>
-          )}
+            {isRegister && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase px-1">Nama Lengkap</label>
+                <input 
+                  required
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                  placeholder="Masukkan nama lengkap"
+                  value={form.name}
+                  onChange={e => setForm({...form, name: e.target.value})}
+                />
+              </div>
+            )}
 
-          <form onSubmit={handleCustomLogin} className="space-y-4">
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-500 uppercase px-1">NIP / Username</label>
               <input 
@@ -793,57 +656,76 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
                 onChange={e => setForm({...form, nip: e.target.value})}
               />
             </div>
-            {isRegistering && (
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase px-1">Nama Lengkap</label>
-                <input 
-                  required
-                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
-                  placeholder="Nama Sesuai Identitas"
-                  value={form.name}
-                  onChange={e => setForm({...form, name: e.target.value})}
-                />
-              </div>
-            )}
             <div className="space-y-1">
-              <label className="text-xs font-bold text-slate-500 uppercase px-1">Password</label>
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">{isRegister ? 'Buat Password' : 'Password'}</label>
               <input 
-                required
                 type="password"
+                required
                 className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
-                placeholder="••••••••"
+                placeholder="Password"
                 value={form.password}
                 onChange={e => setForm({...form, password: e.target.value})}
               />
             </div>
 
-            {error && (
-              <div className="text-[10px] text-red-600 font-bold bg-red-50 p-4 rounded-xl border border-red-100 whitespace-pre-wrap">
-                {error}
-              </div>
+            {isRegister && (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Ulangi Password</label>
+                  <input 
+                    type="password"
+                    required
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                    placeholder="Konfirmasi password"
+                    value={form.confirmPassword}
+                    onChange={e => setForm({...form, confirmPassword: e.target.value})}
+                  />
+                </div>
+
+                <div className="p-4 bg-slate-50 rounded-2xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Otorisasi (Captcha)</label>
+                    <span className="text-sm font-black text-emerald-600 bg-white px-2 py-1 rounded shadow-sm">{captcha.question}</span>
+                  </div>
+                  <input 
+                    required
+                    type="number"
+                    className="w-full px-4 py-2 bg-white border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm text-center font-bold"
+                    placeholder="Jawaban?"
+                    value={form.captchaInput}
+                    onChange={e => setForm({...form, captchaInput: e.target.value})}
+                  />
+                </div>
+              </>
             )}
 
-            <button 
-              type="submit"
-              disabled={loading}
-              className="w-full py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 transition-all shadow-lg bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 text-white"
-            >
-              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span>{isRegistering ? 'Daftar Sekarang' : 'Masuk Sistem'}</span>}
-            </button>
+            <div className="pt-4 space-y-4">
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 hover:bg-emerald-700 transition-all disabled:opacity-50"
+              >
+                {loading ? 'Sabar ya...' : (isRegister ? 'Daftar Sekarang' : 'Masuk')}
+              </button>
+              
+              <div className="text-center">
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setIsRegister(!isRegister);
+                    setError('');
+                    setSuccessMsg('');
+                    setForm({ nip: '', name: '', password: '', confirmPassword: '', captchaInput: '' });
+                  }}
+                  className="text-xs font-bold text-slate-400 hover:text-emerald-600 transition-colors uppercase tracking-widest"
+                >
+                  {isRegister ? 'Sudah punya akun? Login' : 'Belum punya akun? Daftar di sini'}
+                </button>
+              </div>
+            </div>
           </form>
-
-          <p className="text-center text-xs text-slate-500">
-            {isRegistering ? 'Sudah punya akun?' : 'Belum punya akses?'} {' '}
-            <button 
-              onClick={() => setIsRegistering(!isRegistering)}
-              className="text-emerald-600 font-bold hover:underline"
-            >
-              {isRegistering ? 'Login' : 'Daftar sekarang'}
-            </button>
-          </p>
         </div>
       </motion.div>
     </div>
   );
 }
-

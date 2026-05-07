@@ -1,20 +1,44 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /documents/{docId} {
-      allow read: if true;
-      allow create: if request.auth != null || request.resource.data.ownerId == 'custom-admin';
-      allow update, delete: if request.auth != null || (resource.data.ownerId == 'custom-admin' && (request.resource == null || request.resource.data.ownerId == 'custom-admin'));
-    }
-    match /profiles/{nip} {
-      allow read, write: if true;
-    }
-    match /admins/{username} {
-      allow read: if true;
-    }
+    // 0. Global Safety Net
     match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isHumasAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'buttmkhithumas@gmail.com' ||
+        request.auth.uid == 'kNl7ebZq5lVrmdH8Ua5wJwDnFus2'
+      );
+    }
+
+    // --- Collections ---
+
+    match /documents/{docId} {
+      // Open read for everyone
       allow read: if true;
-      allow write: if request.auth != null;
+      
+      // Allow creation for logged in users (for now, will restrict to admin after verification)
+      allow create: if isSignedIn();
+      
+      // Allow edit/delete only for humas admin
+      allow update, delete: if isHumasAdmin();
+    }
+
+    match /profiles/{nip} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    match /admins/{uid} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

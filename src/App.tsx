@@ -34,7 +34,7 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
-import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError, storage, ref, uploadBytesResumable, getDownloadURL } from './lib/firebase';
+import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError, storage, ref, uploadBytesResumable, getDownloadURL, signInAnonymously } from './lib/firebase';
 
 // --- TYPES ---
 interface CustomUser {
@@ -410,9 +410,10 @@ function AdminPanel({ documents }: { documents: any[] }) {
     }
     setIsUploading(true);
     console.log("Starting upload process for file:", selectedFile.name);
+    console.log("Current Auth User:", auth.currentUser?.email || 'Anonymous');
     
-    if (!auth.currentUser && formData.author !== 'Administrator') {
-       console.warn("User not authenticated with Firebase. Upload might fail due to Storage rules.");
+    if (!auth.currentUser) {
+       console.warn("User not authenticated with Firebase. Upload might fail due to Storage/Firestore rules.");
     }
 
     try {
@@ -680,12 +681,22 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
     setLoading(true);
     try {
       // 1. Check for Admin
-      if (form.nip === 'admin' && form.password === 'admin') {
-          onSuccess({
-            uid: `admin-local`,
-            name: `Administrator`,
-            role: ROLES.ADMIN
-          });
+      if ((form.nip === 'admin' && form.password === 'admin') || (form.nip === 'humas buttmkhit' && form.password === 'humas_buttmkhit')) {
+          try {
+            const res = await signInAnonymously(auth);
+            onSuccess({
+              uid: res.user.uid,
+              name: form.nip === 'admin' ? `Administrator` : `Humas BUTTMKHIT`,
+              role: ROLES.ADMIN,
+              isCustomAdmin: true
+            });
+          } catch (anonErr: any) {
+            console.error("Anonymous Auth Error:", anonErr);
+            setError(
+              `Login Gagal: Layanan login belum siap. \n\n` +
+              `Silakan buka Firebase Console -> Authentication -> Sign-in method, lalu AKTIFKAN "Anonymous" (Anonim).`
+            );
+          }
           return;
       }
       

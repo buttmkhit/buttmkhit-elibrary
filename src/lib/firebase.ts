@@ -1,11 +1,13 @@
 import { initializeApp } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, signInAnonymously } from 'firebase/auth';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
 import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
 import firebaseConfig from '../../firebase-applet-config.json';
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+const dbId = firebaseConfig.firestoreDatabaseId === "(default)" ? undefined : firebaseConfig.firestoreDatabaseId;
+export const db = getFirestore(app, dbId); 
+console.log("Firebase DB initialized with ID:", firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export { ref, uploadBytesResumable, getDownloadURL };
@@ -23,7 +25,7 @@ async function testConnection() {
 }
 testConnection();
 
-export { signInWithPopup, signOut };
+export { signInWithPopup, signOut, signInAnonymously };
 
 // Error handling helper as required by instructions
 export enum OperationType {

@@ -410,6 +410,11 @@ function AdminPanel({ documents }: { documents: any[] }) {
     }
     setIsUploading(true);
     console.log("Starting upload process for file:", selectedFile.name);
+    
+    if (!auth.currentUser && formData.author !== 'Administrator') {
+       console.warn("User not authenticated with Firebase. Upload might fail due to Storage rules.");
+    }
+
     try {
       const storagePath = `documents/${Date.now()}_${selectedFile.name}`;
       console.log("Storage path:", storagePath);
@@ -654,7 +659,16 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       }
     } catch (e: any) {
       console.error("Google Login Error:", e);
-      setError(`Login Google gagal: ${e.message || e.code || 'Terjadi kesalahan'}`);
+      if (e.code === 'auth/unauthorized-domain' || e.message?.includes('unauthorized-domain')) {
+        setError(
+          `Login Gagal: Domain ini belum diizinkan. \n\n` +
+          `Silakan buka Firebase Console -> Authentication -> Settings -> Authorized Domains, lalu tambahkan domain: \n` +
+          `- ais-dev-lucgjtl7avremuw2tg463n-554198823809.asia-southeast1.run.app \n` +
+          `- ais-pre-lucgjtl7avremuw2tg463n-554198823809.asia-southeast1.run.app`
+        );
+      } else {
+        setError(`Login Google gagal: ${e.message || e.code || 'Terjadi kesalahan'}`);
+      }
     } finally {
       setLoading(false);
     }
@@ -792,7 +806,11 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
               />
             </div>
 
-            {error && <p className="text-[10px] text-red-500 font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
+            {error && (
+              <div className="text-[10px] text-red-600 font-bold bg-red-50 p-4 rounded-xl border border-red-100 whitespace-pre-wrap">
+                {error}
+              </div>
+            )}
 
             <button 
               type="submit"

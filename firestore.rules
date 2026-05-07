@@ -4,7 +4,7 @@ service cloud.firestore {
     match /documents/{docId} {
       allow read: if true;
       allow create: if request.auth != null || request.resource.data.ownerId == 'custom-admin';
-      allow update, delete: if request.auth != null;
+      allow update, delete: if request.auth != null || (resource.data.ownerId == 'custom-admin' && (request.resource == null || request.resource.data.ownerId == 'custom-admin'));
     }
     match /profiles/{nip} {
       allow read, write: if true;

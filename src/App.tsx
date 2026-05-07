@@ -687,7 +687,7 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
       >
         <div className="p-6 border-b border-slate-100 flex items-center justify-between">
           <h3 className="font-bold text-xl text-slate-800">
-            {type === 'admin' ? 'Login Administrator' : (isRegistering ? 'Daftar User Baru' : 'Login User')}
+            {isRegistering ? 'Daftar Akun' : 'Login'}
           </h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
             <X size={20} />
@@ -695,7 +695,7 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         </div>
 
         <div className="p-8 space-y-6">
-          {type === 'user' && !isRegistering && (
+          {!isRegistering && (
             <button 
               onClick={handleGoogleLogin}
               disabled={loading}
@@ -706,7 +706,7 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
             </button>
           )}
 
-          {type === 'user' && !isRegistering && (
+          {!isRegistering && (
             <div className="flex items-center space-x-4">
               <div className="h-[1px] flex-1 bg-slate-100"></div>
               <span className="text-xs text-slate-400 font-bold uppercase">Atau NIP</span>

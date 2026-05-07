@@ -634,7 +634,8 @@ function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
         });
       }
     } catch (e: any) {
-      setError('Login Google gagal.');
+      console.error("Google Login Error:", e);
+      setError(`Login Google gagal: ${e.message || e.code || 'Terjadi kesalahan'}`);
     } finally {
       setLoading(false);
     }

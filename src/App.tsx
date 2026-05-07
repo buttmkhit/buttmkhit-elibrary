@@ -190,7 +190,7 @@ export default function App() {
             {sidebarOpen && (
               <div className="overflow-hidden">
                 <h1 className="font-bold text-[13px] leading-none tracking-tight whitespace-nowrap">BUTTMKHIT e-Library</h1>
-                <p className="text-[7.5px] text-emerald-400 leading-tight uppercase font-bold tracking-tighter mt-1 opacity-80">Repository Hasil Uji Terap<br />& Integrasi Jurnal Global</p>
+                <p className="text-[7.5px] text-emerald-400 leading-tight font-bold tracking-tighter mt-1 opacity-80">Repository Hasil Uji Terap<br />& Integrasi Jurnal Global</p>
               </div>
             )}
           </div>

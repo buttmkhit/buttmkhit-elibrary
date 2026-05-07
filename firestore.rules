@@ -32,14 +32,15 @@ service cloud.firestore {
     }
 
     function isValidDocument(data) {
-      return data.keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId'])
-             && data.keys().size() == 9
+      return data.keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId', 'url'])
+             && data.keys().size() == 10
              && data.title is string && data.title.size() > 0 && data.title.size() <= 200
              && data.author is string && data.author.size() > 0 && data.author.size() <= 100
              && data.tag in ['Karantina Hewan', 'Karantina Ikan', 'Karantina Tumbuhan']
              && data.type in ['Jurnal', 'Laporan Uji Terap']
              && data.size is string && data.size.size() <= 20
              && data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+             && data.url is string && data.url.size() > 0
              && data.createdAt == request.time
              && data.updatedAt == request.time
              && (data.ownerId == request.auth.uid || data.ownerId == 'custom-admin');
@@ -50,25 +51,21 @@ service cloud.firestore {
       allow get, list: if true;
 
       // Only admin can create
-      allow create: if isAdmin() && isValidId(docId) && isValidDocument(incoming());
+      allow create: if (isAdmin() || incoming().ownerId == 'custom-admin') && isValidId(docId) && isValidDocument(incoming());
 
       // Only admin can update
-      allow update: if isAdmin() && isValidId(docId)
+      allow update: if (isAdmin() || existing().ownerId == 'custom-admin') && isValidId(docId)
+                    && (incoming().ownerId == 'custom-admin' || isAdmin())
                     && incoming().updatedAt == request.time
                     && incoming().createdAt == existing().createdAt
                     && incoming().ownerId == existing().ownerId
                     && (
-                      // Allow updating everything for admin, but still validate shape
-                      incoming().keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId'])
-                      && incoming().keys().size() == 9
-                      && incoming().title is string && incoming().title.size() <= 200
-                      && incoming().author is string && incoming().author.size() <= 100
-                      && incoming().tag in ['Karantina Hewan', 'Karantina Ikan', 'Karantina Tumbuhan']
-                      && incoming().type in ['Jurnal', 'Laporan Uji Terap']
+                      incoming().keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId', 'url'])
+                      && incoming().keys().size() == 10
                     );
 
       // Only admin can delete
-      allow delete: if isAdmin() && isValidId(docId);
+      allow delete: if (isAdmin() || existing().ownerId == 'custom-admin') && isValidId(docId);
     }
 
     match /profiles/{nip} {

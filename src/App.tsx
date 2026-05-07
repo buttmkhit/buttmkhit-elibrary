@@ -60,13 +60,13 @@ const ROLES = {
 
 // --- INITIAL DUMMY DATA ---
 const initialDocuments = [
-  { id: '1', title: 'Pedoman Tindakan Karantina Hewan Penyakit PMK', author: 'Pusat Karantina Hewan', tag: 'Karantina Hewan', type: 'Jurnal', size: '2.4 MB', date: '2023-10-12' },
-  { id: '2', title: 'Identifikasi HPIK pada Komoditas Ekspor', author: 'Balai Karantina Ikan', tag: 'Karantina Ikan', type: 'Laporan Uji Terap', size: '5.1 MB', date: '2023-11-05' },
-  { id: '3', title: 'Analisis Risiko OPTK Buah Tropis', author: 'Badan Karantina Indonesia', tag: 'Karantina Tumbuhan', type: 'Jurnal', size: '3.8 MB', date: '2024-01-20' },
-  { id: '4', title: 'Laporan Uji Terap Perlakuan Fumigasi Fosfin', author: 'Tim Uji Terap', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '1.2 MB', date: '2024-02-15' },
-  { id: '5', title: 'Jurnal Karantina Indonesia Vol 1', author: 'Pusat Riset Karantina', tag: 'Karantina Hewan', type: 'Jurnal', size: '8.5 MB', date: '2024-03-01' },
-  { id: '6', title: 'Metode Deteksi Virus Udang Terbaru', author: 'Laboratorium Ikan', tag: 'Karantina Ikan', type: 'Jurnal', size: '3.2 MB', date: '2024-03-10' },
-  { id: '7', title: 'Studi Kasus Invasif Spodoptera frugiperda', author: 'Bidang Tumbuhan', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '4.7 MB', date: '2024-04-05' },
+  { id: '1', title: 'Pedoman Tindakan Karantina Hewan Penyakit PMK', author: 'Pusat Karantina Hewan', tag: 'Karantina Hewan', type: 'Jurnal', size: '2.4 MB', date: '2023-10-12', url: '#' },
+  { id: '2', title: 'Identifikasi HPIK pada Komoditas Ekspor', author: 'Balai Karantina Ikan', tag: 'Karantina Ikan', type: 'Laporan Uji Terap', size: '5.1 MB', date: '2023-11-05', url: '#' },
+  { id: '3', title: 'Analisis Risiko OPTK Buah Tropis', author: 'Badan Karantina Indonesia', tag: 'Karantina Tumbuhan', type: 'Jurnal', size: '3.8 MB', date: '2024-01-20', url: '#' },
+  { id: '4', title: 'Laporan Uji Terap Perlakuan Fumigasi Fosfin', author: 'Tim Uji Terap', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '1.2 MB', date: '2024-02-15', url: '#' },
+  { id: '5', title: 'Jurnal Karantina Indonesia Vol 1', author: 'Pusat Riset Karantina', tag: 'Karantina Hewan', type: 'Jurnal', size: '8.5 MB', date: '2024-03-01', url: '#' },
+  { id: '6', title: 'Metode Deteksi Virus Udang Terbaru', author: 'Laboratorium Ikan', tag: 'Karantina Ikan', type: 'Jurnal', size: '3.2 MB', date: '2024-03-10', url: '#' },
+  { id: '7', title: 'Studi Kasus Invasif Spodoptera frugiperda', author: 'Bidang Tumbuhan', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '4.7 MB', date: '2024-04-05', url: '#' },
 ];
 
 export default function App() {
@@ -163,12 +163,12 @@ export default function App() {
              <img src="https://karantinaindonesia.go.id/profile/logo-barantin.png" className="h-8 w-auto" alt="Logo" />
              <span className="font-bold text-lg">BUTTMKHIT e-Library</span>
           </div>
-          <div className="flex items-center space-x-6 text-sm">
-             <button onClick={() => setActiveCategory('all')} className="opacity-80 hover:opacity-100 italic">Home</button>
-             <button onClick={() => setActiveCategory('hewan')} className="opacity-80 hover:opacity-100">Karantina Hewan</button>
-             <button onClick={() => setActiveCategory('ikan')} className="opacity-80 hover:opacity-100">Karantina Ikan</button>
-             <button onClick={() => setActiveCategory('tumbuhan')} className="opacity-80 hover:opacity-100">Karantina Tumbuhan</button>
-             <button onClick={() => setActiveCategory('jurnal')} className="opacity-80 hover:opacity-100 font-bold text-amber-400">Jurnal</button>
+          <div className="flex items-center space-x-2 text-sm">
+             <button onClick={() => setActiveCategory('all')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all italic">Home</button>
+             <button onClick={() => setActiveCategory('hewan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Hewan</button>
+             <button onClick={() => setActiveCategory('ikan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Ikan</button>
+             <button onClick={() => setActiveCategory('tumbuhan')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all">Karantina Tumbuhan</button>
+             <button onClick={() => setActiveCategory('jurnal')} className="px-3 py-2 rounded-lg opacity-80 hover:opacity-100 hover:bg-emerald-600 transition-all font-bold text-amber-400">Jurnal</button>
           </div>
           <div className="flex items-center space-x-4">
             {currentUser ? (
@@ -384,11 +384,11 @@ function DocumentCard({ doc, restricted }: DocumentCardProps) {
           <span>{doc.size}</span>
         </div>
         <button 
-          disabled={restricted || !doc.fileUrl}
-          onClick={() => doc.fileUrl && window.open(doc.fileUrl, '_blank')}
-          className={`flex items-center space-x-1 text-sm font-bold ${restricted || !doc.fileUrl ? 'text-slate-300 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-800'}`}
+          disabled={restricted || !doc.url}
+          onClick={() => doc.url && window.open(doc.url, '_blank')}
+          className={`flex items-center space-x-1 text-sm font-bold ${restricted || !doc.url ? 'text-slate-300 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-800'}`}
         >
-          <span>{restricted ? 'Akses Login' : (!doc.fileUrl ? 'File Tidak Ada' : 'Download')}</span>
+          <span>{restricted ? 'Akses Login' : (!doc.url ? 'File Tidak Ada' : 'Download')}</span>
           <Download size={14} />
         </button>
       </div>
@@ -432,7 +432,7 @@ function AdminPanel({ documents }: { documents: any[] }) {
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
         ownerId: auth.currentUser?.uid || 'custom-admin',
-        fileUrl: downloadURL
+        url: downloadURL
       };
       
       const colRef = collection(db, 'documents');
@@ -548,7 +548,8 @@ function AdminPanel({ documents }: { documents: any[] }) {
             <thead>
               <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b">
                 <th className="px-6 py-4">Informasi Dokumen</th>
-                <th className="px-6 py-4">Kategori</th>
+                <th className="px-6 py-4">Kategori Tag</th>
+                <th className="px-6 py-4">Jenis File</th>
                 <th className="px-6 py-4 text-right">Aksi</th>
               </tr>
             </thead>
@@ -571,13 +572,30 @@ function AdminPanel({ documents }: { documents: any[] }) {
                       {doc.tag}
                     </span>
                   </td>
+                  <td className="px-6 py-4">
+                    <span className="text-xs font-medium text-slate-600">
+                      {doc.type}
+                    </span>
+                  </td>
                   <td className="px-6 py-4 text-right">
-                    <button 
-                      onClick={() => handleDelete(doc.id, doc.title)}
-                      className="p-2 text-slate-300 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={18} />
-                    </button>
+                    <div className="flex items-center justify-end space-x-2">
+                       {doc.url && (
+                         <button 
+                           onClick={() => window.open(doc.url, '_blank')}
+                           className="p-2 text-slate-300 hover:text-emerald-500 transition-colors"
+                           title="Buka File"
+                         >
+                           <Download size={18} />
+                         </button>
+                       )}
+                       <button 
+                         onClick={() => handleDelete(doc.id, doc.title)}
+                         className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                         title="Hapus"
+                       >
+                         <Trash2 size={18} />
+                       </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -409,19 +409,34 @@ function AdminPanel({ documents }: { documents: any[] }) {
         return;
     }
     setIsUploading(true);
+    console.log("Starting upload process for file:", selectedFile.name);
     try {
-      const storageRef = ref(storage, `documents/${Date.now()}_${selectedFile.name}`);
+      const storagePath = `documents/${Date.now()}_${selectedFile.name}`;
+      console.log("Storage path:", storagePath);
+      const storageRef = ref(storage, storagePath);
       const uploadTask = uploadBytesResumable(storageRef, selectedFile);
       
+      console.log("Upload task started...");
       await new Promise((resolve, reject) => {
         uploadTask.on('state_changed', 
-          () => {}, // progress
-          reject,   // error
-          () => resolve(null) // complete
+          (snapshot) => {
+            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+            console.log('Upload is ' + progress + '% done');
+          }, 
+          (error) => {
+            console.error("Upload task error:", error);
+            reject(error);
+          },
+          () => {
+            console.log("Upload task completed successfully");
+            resolve(null);
+          }
         );
       });
       
+      console.log("Getting download URL...");
       const downloadURL = await getDownloadURL(storageRef);
+      console.log("Download URL obtained:", downloadURL);
 
       const newDoc = {
         title: formData.title,
@@ -436,13 +451,16 @@ function AdminPanel({ documents }: { documents: any[] }) {
         url: downloadURL
       };
       
+      console.log("Adding document to Firestore:", newDoc);
       const colRef = collection(db, 'documents');
-      await addDoc(colRef, newDoc);
+      const docRef = await addDoc(colRef, newDoc);
+      console.log("Document added with ID:", docRef.id);
       
       setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
       setSelectedFile(null);
       alert('Dokumen berhasil ditambahkan!');
     } catch (error) {
+      console.error("Critical error during upload/creation:", error);
       handleFirestoreError(error, OperationType.CREATE, 'documents');
     } finally {
       setIsUploading(false);

@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import {
-  Search, Download, Upload, FileText, Database, Trash2, ShieldCheck,
-  FileBadge, AlertCircle, X, Dog, Fish, Leaf, LogOut, BookOpen,
-  ChevronDown, Filter, SortAsc, Eye, RefreshCw, CheckCircle, Menu,
-  ExternalLink, TrendingUp, Users, BarChart2, Edit3, Save, XCircle,
-  Star, ChevronRight, ArrowUpDown, BookMarked, Globe, Award, Clock
-} from 'lucide-react';
+import { Search, Download, Upload, FileText, Database, Trash2, ShieldCheck, FileBadge, CircleAlert as AlertCircle, X, Dog, Fish, Leaf, LogOut, BookOpen, ChevronDown, ListFilter as Filter, Import as SortAsc, Eye, RefreshCw, CircleCheck as CheckCircle, Menu, ExternalLink, TrendingUp, Users, ChartBar as BarChart2, CreditCard as Edit3, Save, Circle as XCircle, Star, ChevronRight, ArrowUpDown, BookMarked, Globe, Award, Clock } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { supabase, type Document, type Profile, type DocumentTag, type DocumentType } from './lib/supabase';
 import type { Session } from '@supabase/supabase-js';

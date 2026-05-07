@@ -76,7 +76,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAuthModal, setShowAuthModal] = useState<{show: boolean, type: 'user' | 'admin'}>({ show: false, type: 'user' });
+  const [showAuthModal, setShowAuthModal] = useState<{show: boolean}>({ show: false });
 
   // Firestore Listener
   useEffect(() => {
@@ -139,8 +139,8 @@ export default function App() {
     return matchesSearch && matchesCategory;
   });
 
-  const handleLogin = async (targetRole: string) => {
-    setShowAuthModal({ show: true, type: targetRole === ROLES.ADMIN ? 'admin' : 'user' });
+  const handleLogin = async () => {
+    setShowAuthModal({ show: true });
   };
     
   const handleLogout = async () => {
@@ -238,13 +238,12 @@ export default function App() {
       
       <AuthModal 
         isOpen={showAuthModal.show} 
-        onClose={() => setShowAuthModal({ ...showAuthModal, show: false })}
-        type={showAuthModal.type}
+        onClose={() => setShowAuthModal({ show: false })}
         onSuccess={(user) => {
           setCurrentUser(user);
           setRole(user.role);
           localStorage.setItem('buttmkhit_session', JSON.stringify(user));
-          setShowAuthModal({ ...showAuthModal, show: false });
+          setShowAuthModal({ show: false });
         }}
       />
     </div>
@@ -590,13 +589,12 @@ function AdminPanel({ documents }: { documents: any[] }) {
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  type: 'user' | 'admin';
   onSuccess: (user: CustomUser) => void;
 }
 
-function AuthModal({ isOpen, onClose, type, onSuccess }: AuthModalProps) {
+function AuthModal({ isOpen, onClose, onSuccess }: AuthModalProps) {
   const [isRegistering, setIsRegistering] = useState(false);
-  const [form, setForm] = useState({ nip: '', name: '', password: '', username: '', adminPassword: '' });
+  const [form, setForm] = useState({ nip: '', name: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -624,57 +622,54 @@ function AuthModal({ isOpen, onClose, type, onSuccess }: AuthModalProps) {
     setError('');
     setLoading(true);
     try {
-      if (type === 'admin') {
-        const adminRef = doc(db, 'admins', form.username || 'admin');
-        const snap = await getDoc(adminRef);
-        if (snap.exists() && snap.data().password === form.adminPassword) {
+      // 1. Check for Admin
+      if (form.nip === 'admin' && form.password === 'admin') {
           onSuccess({
-            uid: `admin-${form.username}`,
-            name: `Administrator (${form.username})`,
+            uid: `admin-local`,
+            name: `Administrator`,
             role: ROLES.ADMIN
           });
+          return;
+      }
+      
+      // 2. Check for User (NIP)
+      if (isRegistering) {
+        const userRef = doc(db, 'profiles', form.nip);
+        const snap = await getDoc(userRef);
+        if (snap.exists()) {
+          setError('NIP sudah terdaftar.');
         } else {
-          setError('Username atau Password Admin salah.');
+          await setDoc(userRef, {
+            nip: form.nip,
+            name: form.name,
+            password: form.password,
+            role: ROLES.USER,
+            authMethod: 'custom',
+            createdAt: serverTimestamp()
+          });
+          onSuccess({
+            uid: `nip-${form.nip}`,
+            name: form.name,
+            nip: form.nip,
+            role: ROLES.USER
+          });
         }
       } else {
-        if (isRegistering) {
-          const userRef = doc(db, 'profiles', form.nip);
-          const snap = await getDoc(userRef);
-          if (snap.exists()) {
-            setError('NIP sudah terdaftar.');
-          } else {
-            await setDoc(userRef, {
-              nip: form.nip,
-              name: form.name,
-              password: form.password,
-              role: ROLES.USER,
-              authMethod: 'custom',
-              createdAt: serverTimestamp()
-            });
-            onSuccess({
-              uid: `nip-${form.nip}`,
-              name: form.name,
-              nip: form.nip,
-              role: ROLES.USER
-            });
-          }
+        const userRef = doc(db, 'profiles', form.nip);
+        const snap = await getDoc(userRef);
+        if (snap.exists() && snap.data().password === form.password) {
+          onSuccess({
+            uid: `nip-${form.nip}`,
+            name: snap.data().name,
+            nip: form.nip,
+            role: ROLES.USER
+          });
         } else {
-          const userRef = doc(db, 'profiles', form.nip);
-          const snap = await getDoc(userRef);
-          if (snap.exists() && snap.data().password === form.password) {
-            onSuccess({
-              uid: `nip-${form.nip}`,
-              name: snap.data().name,
-              nip: form.nip,
-              role: ROLES.USER
-            });
-          } else {
-            setError('NIP atau Password salah.');
-          }
+          setError('NIP atau Password salah.');
         }
       }
     } catch (e: any) {
-       console.error(e);
+      console.error(e);
       setError('Terjadi kesalahan sistem.');
     } finally {
       setLoading(false);
@@ -720,90 +715,60 @@ function AuthModal({ isOpen, onClose, type, onSuccess }: AuthModalProps) {
           )}
 
           <form onSubmit={handleCustomLogin} className="space-y-4">
-            {type === 'admin' ? (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Username Admin</label>
-                  <input 
-                    required
-                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 text-sm"
-                    placeholder="Contoh: admin"
-                    value={form.username}
-                    onChange={e => setForm({...form, username: e.target.value})}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Password Admin</label>
-                  <input 
-                    required
-                    type="password"
-                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 text-sm"
-                    placeholder="••••••••"
-                    value={form.adminPassword}
-                    onChange={e => setForm({...form, adminPassword: e.target.value})}
-                  />
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase px-1">NIP / Username</label>
-                  <input 
-                    required
-                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
-                    placeholder="Masukkan NIP Anda"
-                    value={form.nip}
-                    onChange={e => setForm({...form, nip: e.target.value})}
-                  />
-                </div>
-                {isRegistering && (
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold text-slate-500 uppercase px-1">Nama Lengkap</label>
-                    <input 
-                      required
-                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
-                      placeholder="Nama Sesuai Identitas"
-                      value={form.name}
-                      onChange={e => setForm({...form, name: e.target.value})}
-                    />
-                  </div>
-                )}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Password</label>
-                  <input 
-                    required
-                    type="password"
-                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={e => setForm({...form, password: e.target.value})}
-                  />
-                </div>
-              </>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">NIP / Username</label>
+              <input 
+                required
+                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                placeholder="Masukkan NIP atau username"
+                value={form.nip}
+                onChange={e => setForm({...form, nip: e.target.value})}
+              />
+            </div>
+            {isRegistering && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase px-1">Nama Lengkap</label>
+                <input 
+                  required
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                  placeholder="Nama Sesuai Identitas"
+                  value={form.name}
+                  onChange={e => setForm({...form, name: e.target.value})}
+                />
+              </div>
             )}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">Password</label>
+              <input 
+                required
+                type="password"
+                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                placeholder="••••••••"
+                value={form.password}
+                onChange={e => setForm({...form, password: e.target.value})}
+              />
+            </div>
 
             {error && <p className="text-[10px] text-red-500 font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
 
             <button 
               type="submit"
               disabled={loading}
-              className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 transition-all shadow-lg ${type === 'admin' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100 text-white' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 text-white'}`}
+              className="w-full py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 transition-all shadow-lg bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 text-white"
             >
-              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span>{type === 'admin' ? 'Masuk ke Panel' : (isRegistering ? 'Daftar Sekarang' : 'Masuk Sistem')}</span>}
+              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span>{isRegistering ? 'Daftar Sekarang' : 'Masuk Sistem'}</span>}
             </button>
           </form>
 
-          {type === 'user' && (
-            <p className="text-center text-xs text-slate-500">
-              {isRegistering ? 'Sudah punya akun?' : 'Belum punya akses?'} {' '}
-              <button 
-                onClick={() => setIsRegistering(!isRegistering)}
-                className="text-emerald-600 font-bold hover:underline"
-              >
-                {isRegistering ? 'Masuk di sini' : 'Daftar menggunakan NIP'}
-              </button>
-            </p>
-          )}
+          <p className="text-center text-xs text-slate-500">
+            {isRegistering ? 'Sudah punya akun?' : 'Belum punya akses?'} {' '}
+            <button 
+              onClick={() => setIsRegistering(!isRegistering)}
+              className="text-emerald-600 font-bold hover:underline"
+            >
+              {isRegistering ? 'Login' : 'Daftar sekarang'}
+            </button>
+          </p>
         </div>
       </motion.div>
     </div>

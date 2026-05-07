@@ -73,60 +73,10 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<CustomUser | null>(null);
   const [role, setRole] = useState(ROLES.PUBLIC);
   const [activeCategory, setActiveCategory] = useState('all');
-  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [documents, setDocuments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAuthModal, setShowAuthModal] = useState<{show: boolean, type: 'user' | 'admin'}>({ show: false, type: 'user' });
-
-  // Seed default admin
-  useEffect(() => {
-    const seed = async () => {
-      try {
-        const adminRef = doc(db, 'admins', 'admin');
-        const adminSnap = await getDoc(adminRef);
-        if (!adminSnap.exists()) {
-          await setDoc(adminRef, { username: 'admin', password: 'admin' });
-          console.log('Default admin seeded.');
-        }
-      } catch (e) {
-        // Silent fail if rules already locked or seeded
-      }
-    };
-    seed();
-  }, []);
-
-  // Auth Listener
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        const cUser: CustomUser = {
-          uid: user.uid,
-          name: user.displayName || 'User',
-          role: user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
-          photoURL: user.photoURL || undefined
-        };
-        setCurrentUser(cUser);
-        setRole(cUser.role);
-      } else {
-        // Only reset if not a custom session user
-        if (!localStorage.getItem('buttmkhit_session')) {
-          setCurrentUser(null);
-          setRole(ROLES.PUBLIC);
-        }
-      }
-    });
-
-    // Check custom session
-    const savedSession = localStorage.getItem('buttmkhit_session');
-    if (savedSession) {
-      const cUser = JSON.parse(savedSession);
-      setCurrentUser(cUser);
-      setRole(cUser.role);
-    }
-
-    return () => unsubscribe();
-  }, []);
 
   // Firestore Listener
   useEffect(() => {
@@ -144,10 +94,55 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const cUser: CustomUser = {
+          uid: user.uid,
+          name: user.displayName || 'User',
+          role: user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
+          photoURL: user.photoURL || undefined
+        };
+        setCurrentUser(cUser);
+        setRole(cUser.role);
+      } else {
+        if (!localStorage.getItem('buttmkhit_session')) {
+          setCurrentUser(null);
+          setRole(ROLES.PUBLIC);
+        }
+      }
+    });
+
+    const savedSession = localStorage.getItem('buttmkhit_session');
+    if (savedSession) {
+      const cUser = JSON.parse(savedSession);
+      setCurrentUser(cUser);
+      setRole(cUser.role);
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  // Derived state
+  const publicDocs = useMemo(() => {
+    return [...documents].sort(() => 0.5 - Math.random()).slice(0, 3);
+  }, [documents]);
+
+  const filteredDocs = documents.filter(doc => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         doc.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeCategory === 'all' || 
+                           (activeCategory === 'hewan' && doc.tag === 'Karantina Hewan') ||
+                           (activeCategory === 'ikan' && doc.tag === 'Karantina Ikan') ||
+                           (activeCategory === 'tumbuhan' && doc.tag === 'Karantina Tumbuhan');
+    return matchesSearch && matchesCategory;
+  });
+
   const handleLogin = async (targetRole: string) => {
     setShowAuthModal({ show: true, type: targetRole === ROLES.ADMIN ? 'admin' : 'user' });
   };
-
+    
   const handleLogout = async () => {
     try {
       await signOut(auth);
@@ -160,190 +155,87 @@ export default function App() {
     }
   };
 
-  // Derived state for public view (3 random docs)
-  const publicDocs = useMemo(() => {
-    return [...documents].sort(() => 0.5 - Math.random()).slice(0, 3);
-  }, [documents, role === ROLES.PUBLIC]);
-
-  // Filtering logic
-  const filteredDocs = documents.filter(doc => {
-    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                         doc.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = activeCategory === 'all' || 
-                           (activeCategory === 'hewan' && doc.tag === 'Karantina Hewan') ||
-                           (activeCategory === 'ikan' && doc.tag === 'Karantina Ikan') ||
-                           (activeCategory === 'tumbuhan' && doc.tag === 'Karantina Tumbuhan');
-    return matchesSearch && matchesCategory;
-  });
-
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
-      {/* SIDEBAR */}
-      <aside className={`bg-slate-900 text-white transition-all duration-300 flex flex-col z-50 ${sidebarOpen ? 'w-64' : 'w-20'}`}>
-        <div className="p-4 flex items-center justify-between border-b border-slate-800 h-20">
-          <div className="flex items-center space-x-3 overflow-hidden">
-            <img 
-              src="https://karantinaindonesia.go.id/profile/logo-barantin.png" 
-              alt="Logo Barantin" 
-              className="h-10 w-auto object-contain shrink-0 drop-shadow-md"
-            />
-            {sidebarOpen && (
-              <div className="overflow-hidden">
-                <h1 className="font-bold text-[13px] leading-none tracking-tight whitespace-nowrap">BUTTMKHIT e-Library</h1>
-                <p className="text-[7.5px] text-emerald-400 leading-tight font-bold tracking-tighter mt-1 opacity-80">Repository Hasil Uji Terap<br />& Integrasi Jurnal Global</p>
-              </div>
-            )}
+    <div className="min-h-screen bg-slate-50 font-sans text-slate-800">
+      <nav className="bg-[#123138] text-white p-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+             <img src="https://karantinaindonesia.go.id/profile/logo-barantin.png" className="h-8 w-auto" alt="Logo" />
+             <span className="font-bold text-lg">BUTTMKHIT e-Library</span>
           </div>
-          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-800 rounded-lg transition-colors shrink-0">
-            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
-          </button>
-        </div>
-
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <SidebarItem 
-            active={activeCategory === 'all'} 
-            onClick={() => setActiveCategory('all')} 
-            icon={Home} 
-            label="Beranda" 
-            collapsed={!sidebarOpen} 
-          />
-          
-          <div className={`pt-4 pb-2 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest ${!sidebarOpen && 'text-center'}`}>
-            {sidebarOpen ? 'Bidang Karantina' : '---'}
+          <div className="flex items-center space-x-6 text-sm">
+             <button onClick={() => setActiveCategory('all')} className="opacity-80 hover:opacity-100 italic">Home</button>
+             <button onClick={() => setActiveCategory('hewan')} className="opacity-80 hover:opacity-100">Karantina Hewan</button>
+             <button onClick={() => setActiveCategory('ikan')} className="opacity-80 hover:opacity-100">Karantina Ikan</button>
+             <button onClick={() => setActiveCategory('tumbuhan')} className="opacity-80 hover:opacity-100">Karantina Tumbuhan</button>
+             <button onClick={() => setActiveCategory('jurnal')} className="opacity-80 hover:opacity-100 font-bold text-amber-400">Jurnal</button>
           </div>
-          
-          {CATEGORIES.map(cat => (
-            <SidebarItem 
-              key={cat.id}
-              active={activeCategory === cat.id} 
-              onClick={() => setActiveCategory(cat.id)} 
-              icon={cat.icon} 
-              label={cat.label} 
-              collapsed={!sidebarOpen} 
-              badge={documents.filter(d => d.tag === cat.tag).length}
-            />
-          ))}
-
-          <div className="pt-8 space-y-2">
-            <div className={`px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest ${!sidebarOpen && 'text-center'}`}>
-              {sidebarOpen ? 'Akses Sistem' : '---'}
-            </div>
-            
-            {role === ROLES.PUBLIC ? (
-              <>
-                <SidebarItem 
-                  active={false} 
-                  onClick={() => handleLogin(ROLES.USER)} 
-                  icon={UserIcon} 
-                  label="User" 
-                  collapsed={!sidebarOpen} 
-                  highlight="emerald"
-                />
-                <SidebarItem 
-                  active={false} 
-                  onClick={() => handleLogin(ROLES.ADMIN)} 
-                  icon={ShieldCheck} 
-                  label="Administrator" 
-                  collapsed={!sidebarOpen} 
-                  highlight="amber"
-                />
-              </>
-            ) : (
-              <SidebarItem 
-                active={false} 
-                onClick={handleLogout} 
-                icon={LogOut} 
-                label="Keluar" 
-                collapsed={!sidebarOpen} 
-                highlight="red"
-              />
-            )}
-          </div>
-        </nav>
-        
-        <div className="p-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
-          {sidebarOpen ? '© 2026 BUTTMKHIT' : '©'}
-        </div>
-      </aside>
-
-      {/* MAIN CONTENT */}
-      <main className="flex-1 flex flex-col h-screen overflow-hidden">
-        {/* TOP BAR */}
-        <header className="bg-white border-b border-slate-200 h-20 flex items-center justify-between px-8 shrink-0">
-          <div>
-            <h2 className="text-xl font-bold text-slate-800">
-              {role === ROLES.ADMIN ? 'Panel Administrator' : 
-               activeCategory === 'all' ? 'Pusat Referensi Digital' : 
-               CATEGORIES.find(c => c.id === activeCategory)?.label}
-            </h2>
-            <p className="text-xs text-slate-500">
-              {role === ROLES.PUBLIC ? 'Akses Publik (Terbatas)' : role === ROLES.ADMIN ? 'Mode Pengelolaan Data' : 'Akses Pustaka Lengkap'}
-            </p>
-          </div>
-          
           <div className="flex items-center space-x-4">
-            <div className="relative hidden md:block">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
-              <input 
-                type="text" 
-                placeholder="Cari jurnal atau laporan..."
-                className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-emerald-500 w-64 transition-all"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-            </div>
-            {currentUser && (
-              <div className="flex items-center space-x-3">
-                <div className="text-right">
-                  <p className="text-xs font-bold text-slate-700 leading-none">{currentUser.name}</p>
-                  <p className="text-[10px] text-emerald-600 font-medium uppercase mt-1">{role} Access {currentUser.nip ? `(${currentUser.nip})` : ''}</p>
-                </div>
-                {currentUser.photoURL ? (
-                  <img 
-                    src={currentUser.photoURL} 
-                    alt="Avatar" 
-                    className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
-                  />
-                ) : (
-                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center border-2 border-white shadow-sm">
-                    <UserIcon size={20} className="text-slate-400" />
-                  </div>
-                )}
-              </div>
+            {currentUser ? (
+               <div className="flex items-center space-x-2"> 
+                  <span className="text-sm font-medium">{currentUser.name}</span>
+                  <button onClick={handleLogout} className="text-red-400"><LogOut size={16}/></button>
+               </div>
+            ) : (
+                <button onClick={() => handleLogin(ROLES.USER)} className="bg-emerald-600 px-4 py-2 rounded-full text-sm font-bold">Login</button>
             )}
           </div>
-        </header>
-
-        {/* VIEW AREA */}
-        <div className="flex-1 overflow-y-auto p-8">
-          {loading ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-            </div>
-          ) : (
-            <AnimatePresence mode="wait">
-            <motion.div
-              key={`${role}-${activeCategory}`}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              {role === ROLES.ADMIN ? (
-                <AdminPanel 
-                  documents={documents} 
-                />
-              ) : role === ROLES.PUBLIC ? (
-                <PublicView docs={publicDocs} onLogin={() => handleLogin(ROLES.USER)} />
-              ) : (
-                <LibraryView docs={filteredDocs} />
-              )}
-            </motion.div>
-          </AnimatePresence>
-          )}
         </div>
-      </main>
+      </nav>
 
+      <section className="bg-gradient-to-b from-[#123138] to-[#1e4a55] text-white py-16 px-4">
+        <div className="max-w-4xl mx-auto text-center space-y-8">
+            <h1 className="text-4xl font-extrabold tracking-tight">DISCOVER A WORLD OF KNOWLEDGE</h1>
+            <p className="opacity-80">Repository Hasil Uji Terap & Integrasi Jurnal Global</p>
+            <div className="bg-white rounded-full p-2 flex items-center">
+                <input 
+                  type="text" 
+                  placeholder="Title, Author, Or Keyword"
+                  className="flex-1 bg-transparent text-slate-900 px-6 py-3 outline-none"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                <button className="bg-amber-500 p-4 rounded-full"><Search /></button>
+            </div>
+        </div>
+      </section>
+
+       <div className="max-w-7xl mx-auto px-4 flex justify-center space-x-2 my-8">
+          <button onClick={() => setActiveCategory('all')} className={`px-6 py-2 rounded-full font-bold text-sm ${activeCategory === 'all' ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>All</button>
+          {CATEGORIES.map(cat => (
+            <button key={cat.id} onClick={() => setActiveCategory(cat.id)} className={`px-6 py-2 rounded-full font-bold text-sm flex items-center ${activeCategory === cat.id ? 'bg-slate-900 text-white' : 'bg-white border text-slate-600'}`}>
+                <cat.icon size={16} className="mr-2" />
+                {cat.label}
+            </button>
+          ))}
+       </div>
+
+      <main className="max-w-7xl mx-auto px-4 py-12 grid grid-cols-12 gap-8">
+         <div className="col-span-8 space-y-12">
+            {role === ROLES.ADMIN ? (
+                 <AdminPanel documents={documents} />
+              ) : role === ROLES.PUBLIC ? (
+                 <PublicView docs={publicDocs} />
+              ) : (
+                 <LibraryView docs={filteredDocs} />
+              )}
+         </div>
+         <div className="col-span-4 bg-white p-6 rounded-2xl border border-slate-200">
+             <h3 className="font-bold mb-4">Trending This Week</h3>
+             <div className="space-y-4">
+                {documents.slice(0, 3).map(d => (
+                    <div key={d.id} className="flex items-center space-x-4 p-2 bg-slate-50 rounded-lg">
+                        <div className="w-12 h-16 bg-slate-200 rounded"></div>
+                        <div>
+                            <p className="font-bold text-xs">{d.title}</p>
+                            <p className="text-[10px] text-slate-500">{d.author}</p>
+                        </div>
+                    </div>
+                ))}
+             </div>
+         </div>
+      </main>
+      
       <AuthModal 
         isOpen={showAuthModal.show} 
         onClose={() => setShowAuthModal({ ...showAuthModal, show: false })}
@@ -358,6 +250,7 @@ export default function App() {
     </div>
   );
 }
+
 
 interface SidebarItemProps {
   key?: React.Key;

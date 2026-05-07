@@ -1,0 +1,67 @@
+{
+  "entities": {
+    "Document": {
+      "title": "Library Document",
+      "description": "A research paper or report in the e-library",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "description": "Title of the document" },
+        "author": { "type": "string", "description": "Author or institution name" },
+        "tag": { 
+          "type": "string", 
+          "enum": ["Karantina Hewan", "Karantina Ikan", "Karantina Tumbuhan"],
+          "description": "Category of quarantine" 
+        },
+        "type": { 
+          "type": "string", 
+          "enum": ["Jurnal", "Laporan Uji Terap"],
+          "description": "Type of document"
+        },
+        "size": { "type": "string", "description": "File size (e.g., 2.4 MB)" },
+        "date": { "type": "string", "format": "date", "description": "Upload date YYYY-MM-DD" },
+        "url": { "type": "string", "description": "Direct link to the PDF file" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Server timestamp of creation" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Server timestamp of last update" }
+      },
+      "required": ["title", "author", "tag", "type", "date", "size"]
+    },
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Profile for users registered via NIP or Gmail",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "nip": { "type": "string", "description": "National Identity Number (NUP/NIP)" },
+        "name": { "type": "string" },
+        "password": { "type": "string", "description": "Hashed or plain password (for demo)" },
+        "role": { "type": "string", "enum": ["user", "admin"] },
+        "authMethod": { "type": "string", "enum": ["google", "custom"] }
+      },
+      "required": ["name", "role", "authMethod"]
+    },
+    "AdminAccount": {
+      "title": "Admin Account",
+      "description": "Hardcoded admin credentials for system access",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "password": { "type": "string" }
+      },
+      "required": ["username", "password"]
+    }
+  },
+  "firestore": {
+    "documents": {
+      "schema": "Document",
+      "description": "Collection of research journals and test reports"
+    },
+    "profiles": {
+      "schema": "UserProfile",
+      "description": "Collection of user profiles and NIP data"
+    },
+    "admins": {
+      "schema": "AdminAccount",
+      "description": "Hardcoded admin accounts"
+    }
+  }
+}

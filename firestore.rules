@@ -1,0 +1,86 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerified() && request.auth.token.email == 'buttmkhithumas@gmail.com';
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidDocument(data) {
+      return data.keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId'])
+             && data.keys().size() == 9
+             && data.title is string && data.title.size() > 0 && data.title.size() <= 200
+             && data.author is string && data.author.size() > 0 && data.author.size() <= 100
+             && data.tag in ['Karantina Hewan', 'Karantina Ikan', 'Karantina Tumbuhan']
+             && data.type in ['Jurnal', 'Laporan Uji Terap']
+             && data.size is string && data.size.size() <= 20
+             && data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+             && data.createdAt == request.time
+             && data.updatedAt == request.time
+             && data.ownerId == request.auth.uid;
+    }
+
+    match /documents/{docId} {
+      // Public reads allowed
+      allow get, list: if true;
+
+      // Only admin can create
+      allow create: if isAdmin() && isValidId(docId) && isValidDocument(incoming());
+
+      // Only admin can update
+      allow update: if isAdmin() && isValidId(docId)
+                    && incoming().updatedAt == request.time
+                    && incoming().createdAt == existing().createdAt
+                    && incoming().ownerId == existing().ownerId
+                    && (
+                      // Allow updating everything for admin, but still validate shape
+                      incoming().keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId'])
+                      && incoming().keys().size() == 9
+                      && incoming().title is string && incoming().title.size() <= 200
+                      && incoming().author is string && incoming().author.size() <= 100
+                      && incoming().tag in ['Karantina Hewan', 'Karantina Ikan', 'Karantina Tumbuhan']
+                      && incoming().type in ['Jurnal', 'Laporan Uji Terap']
+                    );
+
+      // Only admin can delete
+      allow delete: if isAdmin() && isValidId(docId);
+    }
+
+    match /profiles/{nip} {
+      allow get: if true; // Allow checking NIP for login/registration
+      allow create: if true; // Allow registration
+      allow update, delete: if false; // For now keep it strict
+    }
+
+    match /admins/{username} {
+      allow get: if true; // Allow checking credentials
+      allow create: if username == "admin"; // Allow seeding the default admin
+      allow update, delete: if false; 
+    }
+  }
+}

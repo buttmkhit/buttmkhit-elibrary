@@ -1,0 +1,893 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import { 
+  Search, 
+  Download, 
+  Upload, 
+  FileText, 
+  Database, 
+  Trash2, 
+  ShieldCheck, 
+  User as UserIcon,
+  FileBadge, 
+  AlertCircle,
+  Menu,
+  X,
+  Dog,
+  Fish,
+  Leaf,
+  Home,
+  LogOut,
+  ChevronRight,
+  BookOpen
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  collection, 
+  addDoc, 
+  deleteDoc, 
+  doc, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  serverTimestamp,
+  getDoc,
+  setDoc
+} from 'firebase/firestore';
+import { onAuthStateChanged, User } from 'firebase/auth';
+import { db, auth, googleProvider, signInWithPopup, signOut, OperationType, handleFirestoreError } from './lib/firebase';
+
+// --- TYPES ---
+interface CustomUser {
+  uid: string;
+  name: string;
+  nip?: string;
+  role: string;
+  photoURL?: string;
+}
+
+// --- CONFIGURATION ---
+const CATEGORIES = [
+  { id: 'hewan', label: 'Karantina Hewan', icon: Dog, tag: 'Karantina Hewan' },
+  { id: 'ikan', label: 'Karantina Ikan', icon: Fish, tag: 'Karantina Ikan' },
+  { id: 'tumbuhan', label: 'Karantina Tumbuhan', icon: Leaf, tag: 'Karantina Tumbuhan' },
+];
+
+const ROLES = {
+  PUBLIC: 'public',
+  USER: 'user',
+  ADMIN: 'admin'
+};
+
+// --- INITIAL DUMMY DATA ---
+const initialDocuments = [
+  { id: '1', title: 'Pedoman Tindakan Karantina Hewan Penyakit PMK', author: 'Pusat Karantina Hewan', tag: 'Karantina Hewan', type: 'Jurnal', size: '2.4 MB', date: '2023-10-12' },
+  { id: '2', title: 'Identifikasi HPIK pada Komoditas Ekspor', author: 'Balai Karantina Ikan', tag: 'Karantina Ikan', type: 'Laporan Uji Terap', size: '5.1 MB', date: '2023-11-05' },
+  { id: '3', title: 'Analisis Risiko OPTK Buah Tropis', author: 'Badan Karantina Indonesia', tag: 'Karantina Tumbuhan', type: 'Jurnal', size: '3.8 MB', date: '2024-01-20' },
+  { id: '4', title: 'Laporan Uji Terap Perlakuan Fumigasi Fosfin', author: 'Tim Uji Terap', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '1.2 MB', date: '2024-02-15' },
+  { id: '5', title: 'Jurnal Karantina Indonesia Vol 1', author: 'Pusat Riset Karantina', tag: 'Karantina Hewan', type: 'Jurnal', size: '8.5 MB', date: '2024-03-01' },
+  { id: '6', title: 'Metode Deteksi Virus Udang Terbaru', author: 'Laboratorium Ikan', tag: 'Karantina Ikan', type: 'Jurnal', size: '3.2 MB', date: '2024-03-10' },
+  { id: '7', title: 'Studi Kasus Invasif Spodoptera frugiperda', author: 'Bidang Tumbuhan', tag: 'Karantina Tumbuhan', type: 'Laporan Uji Terap', size: '4.7 MB', date: '2024-04-05' },
+];
+
+export default function App() {
+  const [currentUser, setCurrentUser] = useState<CustomUser | null>(null);
+  const [role, setRole] = useState(ROLES.PUBLIC);
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState<{show: boolean, type: 'user' | 'admin'}>({ show: false, type: 'user' });
+
+  // Seed default admin
+  useEffect(() => {
+    const seed = async () => {
+      try {
+        const adminRef = doc(db, 'admins', 'admin');
+        const adminSnap = await getDoc(adminRef);
+        if (!adminSnap.exists()) {
+          await setDoc(adminRef, { username: 'admin', password: 'admin' });
+          console.log('Default admin seeded.');
+        }
+      } catch (e) {
+        // Silent fail if rules already locked or seeded
+      }
+    };
+    seed();
+  }, []);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        const cUser: CustomUser = {
+          uid: user.uid,
+          name: user.displayName || 'User',
+          role: user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
+          photoURL: user.photoURL || undefined
+        };
+        setCurrentUser(cUser);
+        setRole(cUser.role);
+      } else {
+        // Only reset if not a custom session user
+        if (!localStorage.getItem('buttmkhit_session')) {
+          setCurrentUser(null);
+          setRole(ROLES.PUBLIC);
+        }
+      }
+    });
+
+    // Check custom session
+    const savedSession = localStorage.getItem('buttmkhit_session');
+    if (savedSession) {
+      const cUser = JSON.parse(savedSession);
+      setCurrentUser(cUser);
+      setRole(cUser.role);
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  // Firestore Listener
+  useEffect(() => {
+    const q = query(collection(db, 'documents'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docsData = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDocuments(docsData);
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'documents');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const handleLogin = async (targetRole: string) => {
+    setShowAuthModal({ show: true, type: targetRole === ROLES.ADMIN ? 'admin' : 'user' });
+  };
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth);
+      localStorage.removeItem('buttmkhit_session');
+      setCurrentUser(null);
+      setRole(ROLES.PUBLIC);
+      setActiveCategory('all');
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Derived state for public view (3 random docs)
+  const publicDocs = useMemo(() => {
+    return [...documents].sort(() => 0.5 - Math.random()).slice(0, 3);
+  }, [documents, role === ROLES.PUBLIC]);
+
+  // Filtering logic
+  const filteredDocs = documents.filter(doc => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                         doc.author.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = activeCategory === 'all' || 
+                           (activeCategory === 'hewan' && doc.tag === 'Karantina Hewan') ||
+                           (activeCategory === 'ikan' && doc.tag === 'Karantina Ikan') ||
+                           (activeCategory === 'tumbuhan' && doc.tag === 'Karantina Tumbuhan');
+    return matchesSearch && matchesCategory;
+  });
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-800">
+      {/* SIDEBAR */}
+      <aside className={`bg-slate-900 text-white transition-all duration-300 flex flex-col z-50 ${sidebarOpen ? 'w-64' : 'w-20'}`}>
+        <div className="p-4 flex items-center justify-between border-b border-slate-800 h-20">
+          <div className="flex items-center space-x-3 overflow-hidden">
+            <img 
+              src="https://karantinaindonesia.go.id/profile/logo-barantin.png" 
+              alt="Logo Barantin" 
+              className="h-10 w-auto object-contain shrink-0 drop-shadow-md"
+            />
+            {sidebarOpen && (
+              <div className="overflow-hidden">
+                <h1 className="font-bold text-[13px] leading-none tracking-tight whitespace-nowrap">BUTTMKHIT e-Library</h1>
+                <p className="text-[7.5px] text-emerald-400 leading-tight uppercase font-bold tracking-tighter mt-1 opacity-80">Repository Hasil Uji Terap<br />& Integrasi Jurnal Global</p>
+              </div>
+            )}
+          </div>
+          <button onClick={() => setSidebarOpen(!sidebarOpen)} className="p-2 hover:bg-slate-800 rounded-lg transition-colors shrink-0">
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+
+        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
+          <SidebarItem 
+            active={activeCategory === 'all'} 
+            onClick={() => setActiveCategory('all')} 
+            icon={Home} 
+            label="Beranda" 
+            collapsed={!sidebarOpen} 
+          />
+          
+          <div className={`pt-4 pb-2 px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest ${!sidebarOpen && 'text-center'}`}>
+            {sidebarOpen ? 'Bidang Karantina' : '---'}
+          </div>
+          
+          {CATEGORIES.map(cat => (
+            <SidebarItem 
+              key={cat.id}
+              active={activeCategory === cat.id} 
+              onClick={() => setActiveCategory(cat.id)} 
+              icon={cat.icon} 
+              label={cat.label} 
+              collapsed={!sidebarOpen} 
+              badge={documents.filter(d => d.tag === cat.tag).length}
+            />
+          ))}
+
+          <div className="pt-8 space-y-2">
+            <div className={`px-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest ${!sidebarOpen && 'text-center'}`}>
+              {sidebarOpen ? 'Akses Sistem' : '---'}
+            </div>
+            
+            {role === ROLES.PUBLIC ? (
+              <>
+                <SidebarItem 
+                  active={false} 
+                  onClick={() => handleLogin(ROLES.USER)} 
+                  icon={UserIcon} 
+                  label="User" 
+                  collapsed={!sidebarOpen} 
+                  highlight="emerald"
+                />
+                <SidebarItem 
+                  active={false} 
+                  onClick={() => handleLogin(ROLES.ADMIN)} 
+                  icon={ShieldCheck} 
+                  label="Administrator" 
+                  collapsed={!sidebarOpen} 
+                  highlight="amber"
+                />
+              </>
+            ) : (
+              <SidebarItem 
+                active={false} 
+                onClick={handleLogout} 
+                icon={LogOut} 
+                label="Keluar" 
+                collapsed={!sidebarOpen} 
+                highlight="red"
+              />
+            )}
+          </div>
+        </nav>
+        
+        <div className="p-4 border-t border-slate-800 text-[10px] text-slate-500 text-center">
+          {sidebarOpen ? '© 2026 BUTTMKHIT' : '©'}
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* TOP BAR */}
+        <header className="bg-white border-b border-slate-200 h-20 flex items-center justify-between px-8 shrink-0">
+          <div>
+            <h2 className="text-xl font-bold text-slate-800">
+              {role === ROLES.ADMIN ? 'Panel Administrator' : 
+               activeCategory === 'all' ? 'Pusat Referensi Digital' : 
+               CATEGORIES.find(c => c.id === activeCategory)?.label}
+            </h2>
+            <p className="text-xs text-slate-500">
+              {role === ROLES.PUBLIC ? 'Akses Publik (Terbatas)' : role === ROLES.ADMIN ? 'Mode Pengelolaan Data' : 'Akses Pustaka Lengkap'}
+            </p>
+          </div>
+          
+          <div className="flex items-center space-x-4">
+            <div className="relative hidden md:block">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-4 h-4" />
+              <input 
+                type="text" 
+                placeholder="Cari jurnal atau laporan..."
+                className="pl-10 pr-4 py-2 bg-slate-100 border-none rounded-full text-sm focus:ring-2 focus:ring-emerald-500 w-64 transition-all"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+            </div>
+            {currentUser && (
+              <div className="flex items-center space-x-3">
+                <div className="text-right">
+                  <p className="text-xs font-bold text-slate-700 leading-none">{currentUser.name}</p>
+                  <p className="text-[10px] text-emerald-600 font-medium uppercase mt-1">{role} Access {currentUser.nip ? `(${currentUser.nip})` : ''}</p>
+                </div>
+                {currentUser.photoURL ? (
+                  <img 
+                    src={currentUser.photoURL} 
+                    alt="Avatar" 
+                    className="w-10 h-10 rounded-full border-2 border-white shadow-sm"
+                  />
+                ) : (
+                  <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center border-2 border-white shadow-sm">
+                    <UserIcon size={20} className="text-slate-400" />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* VIEW AREA */}
+        <div className="flex-1 overflow-y-auto p-8">
+          {loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="w-8 h-8 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+            </div>
+          ) : (
+            <AnimatePresence mode="wait">
+            <motion.div
+              key={`${role}-${activeCategory}`}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.2 }}
+            >
+              {role === ROLES.ADMIN ? (
+                <AdminPanel 
+                  documents={documents} 
+                />
+              ) : role === ROLES.PUBLIC ? (
+                <PublicView docs={publicDocs} onLogin={() => handleLogin(ROLES.USER)} />
+              ) : (
+                <LibraryView docs={filteredDocs} />
+              )}
+            </motion.div>
+          </AnimatePresence>
+          )}
+        </div>
+      </main>
+
+      <AuthModal 
+        isOpen={showAuthModal.show} 
+        onClose={() => setShowAuthModal({ ...showAuthModal, show: false })}
+        type={showAuthModal.type}
+        onSuccess={(user) => {
+          setCurrentUser(user);
+          setRole(user.role);
+          localStorage.setItem('buttmkhit_session', JSON.stringify(user));
+          setShowAuthModal({ ...showAuthModal, show: false });
+        }}
+      />
+    </div>
+  );
+}
+
+interface SidebarItemProps {
+  key?: React.Key;
+  icon: any;
+  label: string;
+  active: boolean;
+  onClick: () => void;
+  collapsed: boolean;
+  badge?: number;
+  highlight?: 'emerald' | 'amber' | 'red' | 'none';
+}
+
+function SidebarItem({ icon: Icon, label, active, onClick, collapsed, badge, highlight }: SidebarItemProps) {
+  const highlightClasses = {
+    emerald: 'text-emerald-400 hover:bg-emerald-500/10',
+    amber: 'text-amber-400 hover:bg-amber-500/10',
+    red: 'text-red-400 hover:bg-red-500/10',
+    none: 'text-slate-300 hover:bg-slate-800'
+  };
+
+  const currentHighlight = highlight ? highlightClasses[highlight] : (active ? 'bg-emerald-600 text-white' : highlightClasses.none);
+
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center px-4 py-3 rounded-xl transition-all group ${currentHighlight}`}
+      title={collapsed ? label : ''}
+    >
+      <Icon className={`${collapsed ? 'mx-auto' : 'mr-3'} w-5 h-5 shrink-0 transition-transform group-hover:scale-110`} />
+      {!collapsed && (
+        <div className="flex items-center justify-between w-full">
+          <span className="font-medium text-sm">{label}</span>
+          {badge !== undefined && (
+            <span className={`text-[10px] px-2 py-0.5 rounded-full ${active ? 'bg-white/20' : 'bg-slate-800'}`}>{badge}</span>
+          )}
+        </div>
+      )}
+    </button>
+  );
+}
+
+interface PublicViewProps {
+  docs: any[];
+  onLogin: () => void;
+}
+
+function PublicView({ docs, onLogin }: PublicViewProps) {
+  return (
+    <div className="max-w-4xl mx-auto space-y-12 pb-12">
+      <div className="text-center space-y-4">
+        <div className="inline-flex items-center space-x-2 bg-emerald-50 text-emerald-700 px-4 py-2 rounded-full border border-emerald-100 mb-4">
+          <AlertCircle className="w-4 h-4" />
+          <span className="text-xs font-bold uppercase tracking-wider">Akses Terbatas</span>
+        </div>
+        <h1 className="text-4xl font-extrabold text-slate-900 tracking-tight">Selamat Datang di BUTTMKHIT e-Library</h1>
+        <p className="text-slate-500 max-w-xl mx-auto">
+          Silakan login untuk mengakses ribuan jurnal ilmiah dan laporan uji terap hasil Balai Uji Terap Teknik dan Metode Karantina Hewan, Ikan dan Tumbuhan secara lengkap.
+        </p>
+      </div>
+
+      <div className="space-y-4">
+        <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <h3 className="font-bold text-slate-800 flex items-center">
+            <Database className="w-5 h-5 mr-2 text-emerald-600" />
+            Cuplikan Referensi Acak
+          </h3>
+          <span className="text-xs text-slate-400">Menampilkan 3 dari {initialDocuments.length}+ dokumen</span>
+        </div>
+        
+        <div className="grid gap-4">
+          {docs.map(doc => <DocumentCard key={doc.id} doc={doc} restricted />)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface LibraryViewProps {
+  docs: any[];
+}
+
+function LibraryView({ docs }: LibraryViewProps) {
+  if (docs.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+        <FileBadge size={64} className="mb-4 opacity-20" />
+        <p className="text-lg">Tidak ada dokumen yang ditemukan.</p>
+        <p className="text-sm">Coba ubah filter atau kata kunci pencarian Anda.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {docs.map(doc => <DocumentCard key={doc.id} doc={doc} />)}
+    </div>
+  );
+}
+
+interface DocumentCardProps {
+  key?: React.Key;
+  doc: any;
+  restricted?: boolean;
+}
+
+function DocumentCard({ doc, restricted }: DocumentCardProps) {
+  return (
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 hover:shadow-xl hover:border-emerald-200 transition-all group flex flex-col h-full relative overflow-hidden">
+      {restricted && (
+        <div className="absolute top-0 right-0 p-3">
+          <ShieldCheck className="w-4 h-4 text-slate-300" />
+        </div>
+      )}
+      
+      <div className="flex items-start justify-between mb-4">
+        <div className={`p-3 rounded-xl ${doc.type === 'Jurnal' ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'}`}>
+          <FileText size={24} />
+        </div>
+        <span className="text-[10px] font-bold px-3 py-1 bg-slate-100 rounded-full text-slate-500 uppercase tracking-wider">{doc.tag}</span>
+      </div>
+      
+      <div className="flex-1">
+        <h4 className="font-bold text-slate-800 text-lg leading-tight mb-2 group-hover:text-emerald-700 transition-colors line-clamp-2">
+          {doc.title}
+        </h4>
+        <p className="text-sm text-slate-500 mb-4">{doc.author}</p>
+      </div>
+      
+      <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
+        <div className="text-[10px] text-slate-400 font-medium">
+          <span className="mr-3">{doc.date}</span>
+          <span>{doc.size}</span>
+        </div>
+        <button 
+          disabled={restricted}
+          onClick={() => alert(`Mendownload ${doc.title}`)}
+          className={`flex items-center space-x-1 text-sm font-bold ${restricted ? 'text-slate-300 cursor-not-allowed' : 'text-emerald-600 hover:text-emerald-800'}`}
+        >
+          <span>{restricted ? 'Akses Login' : 'Download'}</span>
+          <Download size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AdminPanel({ documents }: { documents: any[] }) {
+  const [formData, setFormData] = useState({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
+  const [isUploading, setIsUploading] = useState(false);
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsUploading(true);
+    try {
+      const newDoc = {
+        title: formData.title,
+        author: formData.author,
+        tag: formData.tag,
+        type: formData.type,
+        size: (Math.random() * 8 + 1).toFixed(1) + ' MB',
+        date: new Date().toISOString().split('T')[0],
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        ownerId: auth.currentUser?.uid || 'custom-admin',
+      };
+      
+      const colRef = collection(db, 'documents');
+      await addDoc(colRef, newDoc);
+      
+      setFormData({ title: '', author: '', tag: CATEGORIES[0].tag, type: 'Jurnal' });
+      alert('Dokumen berhasil ditambahkan!');
+    } catch (error) {
+      handleFirestoreError(error, OperationType.CREATE, 'documents');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!window.confirm(`Hapus dokumen "${title}"?`)) return;
+    
+    try {
+      const docRef = doc(db, 'documents', id);
+      await deleteDoc(docRef);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `documents/${id}`);
+    }
+  };
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
+      <div className="lg:col-span-1 space-y-6">
+        <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
+          <h3 className="text-xl font-bold border-b pb-4">Tambah Data Baru</h3>
+          <form className="space-y-4" onSubmit={handleUpload}>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">Judul Dokumen</label>
+              <input 
+                required
+                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                placeholder="Ketik judul..."
+                value={formData.title}
+                onChange={e => setFormData({...formData, title: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-500 uppercase px-1">Penulis / Instansi</label>
+              <input 
+                required
+                className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                placeholder="Nama penulis..."
+                value={formData.author}
+                onChange={e => setFormData({...formData, author: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase px-1">Tag Karantina</label>
+                <select 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
+                  value={formData.tag}
+                  onChange={e => setFormData({...formData, tag: e.target.value})}
+                >
+                  {CATEGORIES.map(c => <option key={c.id} value={c.tag}>{c.label}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-500 uppercase px-1">Jenis File</label>
+                <select 
+                  className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm appearance-none"
+                  value={formData.type}
+                  onChange={e => setFormData({...formData, type: e.target.value})}
+                >
+                  <option value="Jurnal">Jurnal</option>
+                  <option value="Laporan Uji Terap">Laporan Uji Terap</option>
+                </select>
+              </div>
+            </div>
+            <div className="pt-2">
+              <button 
+                type="submit" 
+                disabled={isUploading}
+                className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 hover:bg-black transition-all disabled:opacity-50"
+              >
+                {isUploading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <>
+                    <Upload size={18} />
+                    <span>Unggah ke Database</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-6 border-b flex items-center justify-between">
+          <h3 className="font-bold text-lg">Kelola Repositori ({documents.length})</h3>
+          <Database className="text-slate-300" />
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b">
+                <th className="px-6 py-4">Informasi Dokumen</th>
+                <th className="px-6 py-4">Kategori</th>
+                <th className="px-6 py-4 text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {documents.map(doc => (
+                <tr key={doc.id} className="hover:bg-slate-50 transition-colors group">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-slate-100 rounded-lg mr-4 shrink-0">
+                        <FileText size={16} className="text-slate-500" />
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="font-bold text-sm truncate max-w-xs">{doc.title}</p>
+                        <p className="text-xs text-slate-400">{doc.author}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded uppercase">
+                      {doc.tag}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button 
+                      onClick={() => handleDelete(doc.id, doc.title)}
+                      className="p-2 text-slate-300 hover:text-red-500 transition-colors"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// --- NEW AUTH MODAL ---
+interface AuthModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  type: 'user' | 'admin';
+  onSuccess: (user: CustomUser) => void;
+}
+
+function AuthModal({ isOpen, onClose, type, onSuccess }: AuthModalProps) {
+  const [isRegistering, setIsRegistering] = useState(false);
+  const [form, setForm] = useState({ nip: '', name: '', password: '', username: '', adminPassword: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleGoogleLogin = async () => {
+    setLoading(true);
+    try {
+      const res = await signInWithPopup(auth, googleProvider);
+      if (res.user) {
+        onSuccess({
+          uid: res.user.uid,
+          name: res.user.displayName || 'Google User',
+          role: res.user.email === 'buttmkhithumas@gmail.com' ? ROLES.ADMIN : ROLES.USER,
+          photoURL: res.user.photoURL || undefined
+        });
+      }
+    } catch (e: any) {
+      setError('Login Google gagal.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCustomLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+    try {
+      if (type === 'admin') {
+        const adminRef = doc(db, 'admins', form.username || 'admin');
+        const snap = await getDoc(adminRef);
+        if (snap.exists() && snap.data().password === form.adminPassword) {
+          onSuccess({
+            uid: `admin-${form.username}`,
+            name: `Administrator (${form.username})`,
+            role: ROLES.ADMIN
+          });
+        } else {
+          setError('Username atau Password Admin salah.');
+        }
+      } else {
+        if (isRegistering) {
+          const userRef = doc(db, 'profiles', form.nip);
+          const snap = await getDoc(userRef);
+          if (snap.exists()) {
+            setError('NIP sudah terdaftar.');
+          } else {
+            await setDoc(userRef, {
+              nip: form.nip,
+              name: form.name,
+              password: form.password,
+              role: ROLES.USER,
+              authMethod: 'custom',
+              createdAt: serverTimestamp()
+            });
+            onSuccess({
+              uid: `nip-${form.nip}`,
+              name: form.name,
+              nip: form.nip,
+              role: ROLES.USER
+            });
+          }
+        } else {
+          const userRef = doc(db, 'profiles', form.nip);
+          const snap = await getDoc(userRef);
+          if (snap.exists() && snap.data().password === form.password) {
+            onSuccess({
+              uid: `nip-${form.nip}`,
+              name: snap.data().name,
+              nip: form.nip,
+              role: ROLES.USER
+            });
+          } else {
+            setError('NIP atau Password salah.');
+          }
+        }
+      }
+    } catch (e: any) {
+       console.error(e);
+      setError('Terjadi kesalahan sistem.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl"
+      >
+        <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-bold text-xl text-slate-800">
+            {type === 'admin' ? 'Login Administrator' : (isRegistering ? 'Daftar User Baru' : 'Login User')}
+          </h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-8 space-y-6">
+          {type === 'user' && !isRegistering && (
+            <button 
+              onClick={handleGoogleLogin}
+              disabled={loading}
+              className="w-full flex items-center justify-center space-x-3 py-3 border border-slate-200 rounded-xl hover:bg-slate-50 transition-all font-medium text-slate-700"
+            >
+              <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+              <span>Lanjut dengan Google</span>
+            </button>
+          )}
+
+          {type === 'user' && !isRegistering && (
+            <div className="flex items-center space-x-4">
+              <div className="h-[1px] flex-1 bg-slate-100"></div>
+              <span className="text-xs text-slate-400 font-bold uppercase">Atau NIP</span>
+              <div className="h-[1px] flex-1 bg-slate-100"></div>
+            </div>
+          )}
+
+          <form onSubmit={handleCustomLogin} className="space-y-4">
+            {type === 'admin' ? (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Username Admin</label>
+                  <input 
+                    required
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 text-sm"
+                    placeholder="Contoh: admin"
+                    value={form.username}
+                    onChange={e => setForm({...form, username: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Password Admin</label>
+                  <input 
+                    required
+                    type="password"
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-500 text-sm"
+                    placeholder="••••••••"
+                    value={form.adminPassword}
+                    onChange={e => setForm({...form, adminPassword: e.target.value})}
+                  />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase px-1">NIP / Username</label>
+                  <input 
+                    required
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                    placeholder="Masukkan NIP Anda"
+                    value={form.nip}
+                    onChange={e => setForm({...form, nip: e.target.value})}
+                  />
+                </div>
+                {isRegistering && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase px-1">Nama Lengkap</label>
+                    <input 
+                      required
+                      className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                      placeholder="Nama Sesuai Identitas"
+                      value={form.name}
+                      onChange={e => setForm({...form, name: e.target.value})}
+                    />
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500 uppercase px-1">Password</label>
+                  <input 
+                    required
+                    type="password"
+                    className="w-full px-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-emerald-500 text-sm"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={e => setForm({...form, password: e.target.value})}
+                  />
+                </div>
+              </>
+            )}
+
+            {error && <p className="text-[10px] text-red-500 font-bold bg-red-50 p-2 rounded-lg">{error}</p>}
+
+            <button 
+              type="submit"
+              disabled={loading}
+              className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center space-x-2 transition-all shadow-lg ${type === 'admin' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-100 text-white' : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100 text-white'}`}
+            >
+              {loading ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <span>{type === 'admin' ? 'Masuk ke Panel' : (isRegistering ? 'Daftar Sekarang' : 'Masuk Sistem')}</span>}
+            </button>
+          </form>
+
+          {type === 'user' && (
+            <p className="text-center text-xs text-slate-500">
+              {isRegistering ? 'Sudah punya akun?' : 'Belum punya akses?'} {' '}
+              <button 
+                onClick={() => setIsRegistering(!isRegistering)}
+                className="text-emerald-600 font-bold hover:underline"
+              >
+                {isRegistering ? 'Masuk di sini' : 'Daftar menggunakan NIP'}
+              </button>
+            </p>
+          )}
+        </div>
+      </motion.div>
+    </div>
+  );
+}
+

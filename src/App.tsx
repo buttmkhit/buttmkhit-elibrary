@@ -80,7 +80,7 @@ export default function App() {
 
   // Firestore Listener
   useEffect(() => {
-    const q = query(collection(db, 'documents'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'documents'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docsData = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -89,6 +89,7 @@ export default function App() {
       setDocuments(docsData);
       setLoading(false);
     }, (error) => {
+      console.error("Firestore onSnapshot error details:", error);
       handleFirestoreError(error, OperationType.LIST, 'documents');
     });
     return () => unsubscribe();

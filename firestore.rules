@@ -1,83 +1,20 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Helper functions
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
-    function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
-    }
-
-    function isAdmin() {
-      return isVerified() && request.auth.token.email == 'buttmkhithumas@gmail.com';
-    }
-
-    function isValidId(id) {
-      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
-    }
-
-    function incoming() {
-      return request.resource.data;
-    }
-
-    function existing() {
-      return resource.data;
-    }
-
-    function isValidDocument(data) {
-      return data.keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId', 'url'])
-             && data.keys().size() == 10
-             && data.title is string && data.title.size() > 0 && data.title.size() <= 200
-             && data.author is string && data.author.size() > 0 && data.author.size() <= 100
-             && data.tag in ['Karantina Hewan', 'Karantina Ikan', 'Karantina Tumbuhan']
-             && data.type in ['Jurnal', 'Laporan Uji Terap']
-             && data.size is string && data.size.size() <= 20
-             && data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
-             && data.url is string && data.url.size() > 0
-             && data.createdAt == request.time
-             && data.updatedAt == request.time
-             && (data.ownerId == request.auth.uid || data.ownerId == 'custom-admin');
-    }
-
     match /documents/{docId} {
-      // Public reads allowed
-      allow get, list: if true;
-
-      // Only admin can create
-      allow create: if (isAdmin() || incoming().ownerId == 'custom-admin') && isValidId(docId) && isValidDocument(incoming());
-
-      // Only admin can update
-      allow update: if (isAdmin() || existing().ownerId == 'custom-admin') && isValidId(docId)
-                    && (incoming().ownerId == 'custom-admin' || isAdmin())
-                    && incoming().updatedAt == request.time
-                    && incoming().createdAt == existing().createdAt
-                    && incoming().ownerId == existing().ownerId
-                    && (
-                      incoming().keys().hasAll(['title', 'author', 'tag', 'type', 'size', 'date', 'createdAt', 'updatedAt', 'ownerId', 'url'])
-                      && incoming().keys().size() == 10
-                    );
-
-      // Only admin can delete
-      allow delete: if (isAdmin() || existing().ownerId == 'custom-admin') && isValidId(docId);
+      allow read: if true;
+      allow create: if request.auth != null || request.resource.data.ownerId == 'custom-admin';
+      allow update, delete: if request.auth != null;
     }
-
     match /profiles/{nip} {
-      allow get: if true; // Allow checking NIP for login/registration
-      allow create: if true; // Allow registration
-      allow update, delete: if false; // For now keep it strict
+      allow read, write: if true;
     }
-
     match /admins/{username} {
-      allow get: if true; // Allow checking credentials
-      allow create: if username == "admin"; // Allow seeding the default admin
-      allow update, delete: if false; 
+      allow read: if true;
+    }
+    match /{document=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
     }
   }
 }

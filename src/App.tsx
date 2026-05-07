@@ -413,7 +413,11 @@ function AdminPanel({ documents }: { documents: any[] }) {
       const uploadTask = uploadBytesResumable(storageRef, selectedFile);
       
       await new Promise((resolve, reject) => {
-        uploadTask.on('state_changed', null, reject, resolve);
+        uploadTask.on('state_changed', 
+          () => {}, // progress
+          reject,   // error
+          () => resolve(null) // complete
+        );
       });
       
       const downloadURL = await getDownloadURL(storageRef);
@@ -456,8 +460,8 @@ function AdminPanel({ documents }: { documents: any[] }) {
   };
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pb-12">
-      <div className="lg:col-span-1 space-y-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 pb-12">
+      <div className="space-y-6">
         <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm space-y-6">
           <h3 className="text-xl font-bold border-b pb-4">Tambah Data Baru</h3>
           <form className="space-y-4" onSubmit={handleUpload}>
@@ -534,7 +538,7 @@ function AdminPanel({ documents }: { documents: any[] }) {
         </div>
       </div>
 
-      <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-3xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-6 border-b flex items-center justify-between">
           <h3 className="font-bold text-lg">Kelola Repositori ({documents.length})</h3>
           <Database className="text-slate-300" />

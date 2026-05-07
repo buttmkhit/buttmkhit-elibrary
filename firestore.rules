@@ -42,7 +42,7 @@ service cloud.firestore {
              && data.date is string && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
              && data.createdAt == request.time
              && data.updatedAt == request.time
-             && data.ownerId == request.auth.uid;
+             && (data.ownerId == request.auth.uid || data.ownerId == 'custom-admin');
     }
 
     match /documents/{docId} {

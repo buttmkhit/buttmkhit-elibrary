@@ -1056,7 +1056,12 @@ function AuthModal({ onClose, onSuccess }: {
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">NIP / Username</label>
               <input required value={form.nip} onChange={e => setForm({ ...form, nip: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="NIP atau username Anda" autoComplete="username" />
+                placeholder="Contoh: admin atau humas_buttmkhit" autoComplete="username" />
+              {mode === 'login' && (
+                <p className="text-[10px] text-slate-400 mt-1.5">
+                  <strong>Demo:</strong> admin / admin123 atau humas_buttmkhit / humas_buttmkhit2024
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Password</label>

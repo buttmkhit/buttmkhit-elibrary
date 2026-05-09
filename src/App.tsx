@@ -942,7 +942,7 @@ function AuthModal({ onClose, onSuccess }: {
   onSuccess: (profile: Profile) => void;
 }) {
   const [mode, setMode] = useState<'login' | 'register'>('login');
-  const [form, setForm] = useState({ nip: '', name: '', password: '', confirmPassword: '', captcha: '' });
+  const [form, setForm] = useState({ email: '', name: '', password: '', confirmPassword: '', captcha: '' });
   const [captcha, setCaptcha] = useState({ q: '', a: 0 });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -970,29 +970,34 @@ function AuthModal({ onClose, onSuccess }: {
     try {
       if (mode === 'register') {
         const { data, error: signUpErr } = await supabase.auth.signUp({
-          email: `${form.nip.replace(/\s+/g, '_')}@buttmkhit.local`,
+          email: form.email,
           password: form.password,
-          options: { data: { name: form.name, nip: form.nip, role: 'user' } },
+          options: { data: { name: form.name, nip: form.email, role: 'user' } },
         });
-        if (signUpErr) throw signUpErr;
-        if (data.user) {
-          await supabase.from('profiles').upsert({
-            id: data.user.id, name: form.name, nip: form.nip, role: 'user',
-          }, { onConflict: 'id' });
-          setSuccess('Pendaftaran berhasil! Silakan login.');
-          setMode('login');
-          setForm({ nip: '', name: '', password: '', confirmPassword: '', captcha: '' });
-        }
+        if (signUpErr) throw new Error(`Gagal mendaftar: ${signUpErr.message}`);
+        if (!data.user) throw new Error('Pendaftaran gagal. Silakan coba lagi.');
+
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { error: upsertErr } = await supabase.from('profiles').upsert({
+          id: data.user.id, name: form.name, nip: form.email, role: 'user',
+        }, { onConflict: 'id' });
+        if (upsertErr) throw upsertErr;
+
+        setSuccess('Pendaftaran berhasil! Silakan login.');
+        setMode('login');
+        setForm({ email: '', name: '', password: '', confirmPassword: '', captcha: '' });
       } else {
         const { data, error: signInErr } = await supabase.auth.signInWithPassword({
-          email: `${form.nip.replace(/\s+/g, '_')}@buttmkhit.local`,
+          email: form.email,
           password: form.password,
         });
-        if (signInErr) throw new Error('NIP atau password salah.');
-        if (data.user) {
-          const { data: prof } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
-          if (prof) onSuccess(prof as Profile);
-        }
+        if (signInErr) throw new Error(`Gagal login: ${signInErr.message}`);
+        if (!data.user) throw new Error('Login tidak berhasil. Silakan coba lagi.');
+
+        const { data: prof, error: profErr } = await supabase.from('profiles').select('*').eq('id', data.user.id).maybeSingle();
+        if (profErr) throw profErr;
+        if (!prof) throw new Error('Profil pengguna tidak ditemukan.');
+        onSuccess(prof as Profile);
       }
     } catch (err: any) {
       setError(err.message || 'Terjadi kesalahan.');
@@ -1053,13 +1058,14 @@ function AuthModal({ onClose, onSuccess }: {
               </div>
             )}
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">NIP / Username</label>
-              <input required value={form.nip} onChange={e => setForm({ ...form, nip: e.target.value })}
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-1.5">Email</label>
+              <input required type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
                 className="w-full px-4 py-3 bg-slate-50 rounded-xl text-sm outline-none focus:ring-2 focus:ring-emerald-500"
-                placeholder="Contoh: admin atau humas_buttmkhit" autoComplete="username" />
+                placeholder="Masukkan email Anda" autoComplete="email" />
               {mode === 'login' && (
                 <p className="text-[10px] text-slate-400 mt-1.5">
-                  <strong>Demo:</strong> admin / admin123 atau humas_buttmkhit / humas_buttmkhit2024
+                  <strong>Demo:</strong> admin@example.com / admin123<br/>
+                  atau humas@example.com / humas123
                 </p>
               )}
             </div>
